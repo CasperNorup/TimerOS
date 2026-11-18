@@ -1,0 +1,26 @@
+TimerOS Logo Kit
+
+APP AND PROFILE
+TimerOS-app-and-profile-square.png is the opaque 1024 × 1024 profile image.
+TimerOS-app-icon-rounded.png is the cobalt-ribbon T on a navy tile with transparent corners.
+Use src-tauri/icons/icon.png and icon.ico for desktop packaging.
+
+STANDALONE MARK
+TimerOS-mark-transparent.png isolates the folded-ribbon T for other layouts.
+
+WEBSITE HEADERS
+Use the light-background wordmark on light surfaces and the dark-background wordmark on dark surfaces.
+Both PNGs have transparent backgrounds.
+
+BROWSER TABS AND PRINT
+favicon.ico includes 16, 32, and 48 px icons. TimerOS-favicon-32.png is the 32 px PNG.
+The black and white print SVGs use the ribbon silhouette and outlined lettering.
+
+PORTRAIT SPLASH
+TimerOS-splash-screen.png is the static 852 × 1846 launch screen.
+TimerOS-splash-screen-animated.mp4 and TimerOS-splash-screen-lottie.json contain the 3.2-second Classic reveal.
+Bloom, Origami, and Signal each run four seconds in MP4 and Lottie JSON.
+
+ROUNDED ICON MOTION
+Bloom opens the ribbon with blue glints. Origami brings the crossbar and stem together. Signal scans the mark into view.
+All animations run at 30 fps. MP4s are silent with an opaque navy matte. Lottie files embed their own artwork.
