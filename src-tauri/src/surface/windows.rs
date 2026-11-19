@@ -61,7 +61,7 @@ fn displays() -> Vec<Display> {
         1
     }
 
-    let mut list = Vec::new();
+    let mut list: Vec<Display> = Vec::new();
     unsafe {
         EnumDisplayMonitors(null_mut(), null(), Some(collect), &mut list as *mut Vec<Display> as LPARAM);
     }
