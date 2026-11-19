@@ -2,12 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { version } from "../../package.json";
 import mark from "../assets/branding/TimerOS-mark-transparent.png";
 import { StartupSplash } from "./StartupSplash";
+import { TimerPage } from "./TimerPage";
+import { useTimer } from "./useTimer";
+import type { Interruption, Policy } from "./timer";
 
 const appearances = ["System", "Light", "Dark"] as const;
 type Appearance = typeof appearances[number];
 type Page = "Timer" | "Settings";
 
 const appearanceKey = "timeros.appearance.v1";
+const interruptions: [Interruption, string][] = [
+  ["lock", "When Windows locks"],
+  ["sleep", "When the PC sleeps"],
+  ["quit", "When TimerOS closes"],
+];
 
 function readAppearance(): Appearance {
   try {
@@ -23,6 +31,7 @@ export function App() {
   const [appearance, setAppearance] = useState(readAppearance);
   const [saveFailed, setSaveFailed] = useState(false);
   const [page, setPage] = useState<Page>("Timer");
+  const timer = useTimer();
   const main = useRef<HTMLElement>(null);
   const movedPage = useRef(false);
 
@@ -77,16 +86,10 @@ export function App() {
       </header>
 
       <main ref={main} tabIndex={-1} aria-labelledby="page-title">
+        {timer.error && <p className="status-error" role="alert">{timer.error}</p>}
+        {!timer.view && !timer.busy && <button type="button" onClick={() => void timer.load()}>Retry loading timer</button>}
         {page === "Timer" ? (
-          <>
-            <h1 id="page-title">Timer</h1>
-            <section className="panel timer" aria-labelledby="preset-title">
-              <h2 id="preset-title">Classic Pomodoro</h2>
-              <p className="time" aria-label="25 minutes">25:00</p>
-              <p className="intervals">25 min focus · 5 min break</p>
-            </section>
-            <p className="preview-note">Timer controls arrive in Phase 1.</p>
-          </>
+          <TimerPage model={timer} />
         ) : (
           <>
             <h1 id="page-title">Settings</h1>
@@ -103,6 +106,23 @@ export function App() {
               </label>
               {saveFailed && <p role="status">This display mode could only be applied for this launch.</p>}
             </section>
+            {timer.view && <section className="panel settings" aria-labelledby="recovery-title">
+              <h2 id="recovery-title">Timer recovery</h2>
+              {interruptions.map(([event, label]) => (
+                <label className="setting-row" key={event}>
+                  <span>{label}</span>
+                  <select value={timer.view?.policies[event]} disabled={timer.busy}
+                    onChange={change => {
+                      const policy = change.currentTarget.value as Policy;
+                      void timer.update(state => { state.policies[event] = policy; });
+                    }}>
+                    <option value="pause">Pause and resume manually</option>
+                    <option value="continue">Keep time running</option>
+                  </select>
+                </label>
+              ))}
+              {timer.trackingError && <p role="status">{timer.trackingError}</p>}
+            </section>}
           </>
         )}
       </main>

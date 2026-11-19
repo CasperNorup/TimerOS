@@ -36,11 +36,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
       - run: npm ci
+      - run: npm test
       - name: Build the Windows installer
         run: |
-          cargo fmt --manifest-path src-tauri/Cargo.toml --check
-          if ($LASTEXITCODE -ne 0) { throw 'Rust format check failed.' }
           npm run tauri -- build -- --locked
           if ($LASTEXITCODE -ne 0) { throw 'TimerOS installer build failed.' }
           $version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
@@ -48,8 +50,35 @@ jobs:
           if ($installers.Count -ne 1) { throw 'Expected one TimerOS Windows installer.' }
           "TIMEROS_VERSION=$version" >> $env:GITHUB_ENV
           "TIMEROS_INSTALLER=$($installers[0].FullName)" >> $env:GITHUB_ENV
-      - name: Verify the installer and the installed app
+      - name: Verify the installed Windows app
         run: ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER
+      - name: Verify the timer and recovery in WebView2
+        run: |
+          $env:TIMEROS_WEBVIEW_PORT = '9238'
+          $base = Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $base.app.windows[0].title = 'TimerOS Smoke Test'
+          $browserArguments = "--remote-debugging-port=$env:TIMEROS_WEBVIEW_PORT --proxy-server=http://127.0.0.1:1"
+          $base.app.windows[0] | Add-Member -NotePropertyName additionalBrowserArgs -NotePropertyValue $browserArguments
+          $id = "com.caspernorup.timeros.smoke.$env:GITHUB_RUN_ID.$env:GITHUB_RUN_ATTEMPT"
+          $smoke = @{ identifier = $id; app = @{ windows = $base.app.windows } }
+          $config = Join-Path $env:RUNNER_TEMP 'timeros-smoke.json'
+          $smoke | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $config
+          npm run tauri -- build --no-bundle --config $config -- --locked
+          if ($LASTEXITCODE -ne 0) { throw 'TimerOS smoke build failed.' }
+          $exe = (Resolve-Path -LiteralPath 'src-tauri/target/release/timeros.exe').Path
+          foreach ($scenario in @('initial','restored')) {
+              $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+              try {
+                  npm run test:windows -- $scenario
+                  if ($LASTEXITCODE -ne 0) { throw "TimerOS $scenario smoke test failed." }
+                  ./tests/windows-signal.ps1 -Title 'TimerOS Smoke Test' -Signal quit
+                  if (!$process.WaitForExit(10000) -or $process.ExitCode -ne 0) {
+                      throw 'The test app did not close cleanly.'
+                  }
+              } finally {
+                  if (!$process.HasExited) { Stop-Process -Id $process.Id }
+              }
+          }
       - name: Upload the verified Windows installer
         uses: actions/upload-artifact@v4
         with:

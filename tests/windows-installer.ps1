@@ -6,8 +6,6 @@ $ErrorActionPreference = 'Stop'
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
 $version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'TimerOS.lnk'
-$env:TIMEROS_WEBVIEW_PORT = '9238'
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$env:TIMEROS_WEBVIEW_PORT"
 
 $install = Start-Process -FilePath $installerPath -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
 if ($install.ExitCode -ne 0) { throw "TimerOS installer exited with $($install.ExitCode)." }
@@ -53,11 +51,20 @@ if ($ratio -lt .8) { throw "Installed executable icon differs from the official 
 
 $application = Start-Process -FilePath $executable -PassThru -WindowStyle Hidden
 try {
-    npm.cmd run test:windows
-    if ($LASTEXITCODE -ne 0) { throw 'TimerOS launch verification failed.' }
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        if ($application.HasExited) { throw "Installed TimerOS exited with $($application.ExitCode)." }
+        if (./tests/windows-signal.ps1 -Title 'TimerOS' -Signal find) { break }
+        if ([DateTime]::UtcNow -gt $deadline) { throw 'The installed TimerOS window did not open.' }
+        Start-Sleep -Milliseconds 300
+    } while ($true)
+    ./tests/windows-signal.ps1 -Title 'TimerOS' -Signal quit
+    if (!$application.WaitForExit(10000) -or $application.ExitCode -ne 0) {
+        throw 'Installed TimerOS did not close cleanly.'
+    }
 } finally {
     if (!$application.HasExited) { Stop-Process -Id $application.Id }
 }
 
-Write-Host "Verified the TimerOS $version per-user install, Start menu shortcut, and app icon."
+Write-Host "Verified the TimerOS $version per-user install, Start menu shortcut, app icon, and launch."
 Write-Host "SHA-256: $((Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash)"
