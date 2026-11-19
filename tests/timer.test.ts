@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { act, builtIns, decodeWorkspace, deletePreset, displayTime, minute,
   newWorkspace, reconcile, recover, savePreset, startSession, type Routine } from "../src/app/timer.ts";
+import { normalizeShortcut, pulsePeriod, readDesktopSettings } from "../src/app/desktopSettings.ts";
 
 const start = 1_000_000;
 const classic = builtIns[0].routine;
@@ -115,4 +116,31 @@ test("new presets, duplicate, update and delete preserve old session settings", 
   assert.deepEqual(decodeWorkspace(JSON.stringify(state)), state);
   assert.throws(() => savePreset(state, { ...classic, focus: 0 }));
   assert.throws(() => decodeWorkspace('{"version":9}'));
+});
+
+test("older workspaces keep their presets and get quiet desktop defaults", () => {
+  const state = newWorkspace();
+  savePreset(state, { ...classic, name: "Phase 1 study" });
+  const { desktop: _desktop, ...phaseOne } = state;
+  const migrated = decodeWorkspace(JSON.stringify(phaseOne));
+  assert.equal(migrated.presets[0].routine.name, "Phase 1 study");
+  assert.equal(migrated.desktop.sound, false);
+  assert.equal(migrated.desktop.target, "all");
+  assert.equal(migrated.desktop.mini.placement, "right");
+});
+
+test("desktop settings enforce bounded pulse timing and valid shortcuts", () => {
+  const settings = readDesktopSettings({
+    mini: { freeX: 2, opacity: 0, color: "invalid" },
+    shortcuts: { dismiss: "alt+ctrl+f10" },
+    cues: { finished: { opacity: 100, count: 15 } },
+  });
+  assert.equal(settings.mini.freeX, 1);
+  assert.equal(settings.mini.opacity, 35);
+  assert.equal(settings.mini.color, "#111e35");
+  assert.equal(settings.shortcuts.dismiss, "Ctrl+Alt+F10");
+  assert.equal(settings.cues.finished.opacity, 55);
+  assert.equal(settings.cues.finished.count, 6);
+  assert.throws(() => normalizeShortcut("Shift+F8"));
+  assert.equal(pulsePeriod(250, 0), 2000);
 });

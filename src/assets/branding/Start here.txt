@@ -3,7 +3,8 @@ TimerOS Logo Kit
 APP AND PROFILE
 TimerOS-app-and-profile-square.png is the opaque 1024 × 1024 profile image.
 TimerOS-app-icon-rounded.png is the cobalt-ribbon T on a navy tile with transparent corners.
-Use src-tauri/icons/icon.png and icon.ico for desktop packaging.
+TimerOS-app-icon-transparent.png centers the standalone blue T on a transparent square sized to match the BudgetOS app icon.
+Use it in the app header and use src-tauri/icons/timeros-transparent.ico for Windows desktop packaging.
 
 STANDALONE MARK
 TimerOS-mark-transparent.png isolates the folded-ribbon T for other layouts.

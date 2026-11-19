@@ -2,23 +2,15 @@ import { useState } from "react";
 import { act, builtIns, deletePreset, displayTime, maxBlockMinutes, minute, savePreset, startSession,
   type Goal, type Routine, type Session, type TimerAction, type Workspace } from "./timer";
 import type { useTimer } from "./useTimer";
+import { formatRemaining as clock, progressOf } from "./useDesktop";
 
 type Model = ReturnType<typeof useTimer>;
-
-function clock(ms: number): string {
-  const seconds = Math.ceil(ms / 1000);
-  const min = Math.floor(seconds / 60);
-  return min + ":" + String(seconds % 60).padStart(2, "0");
-}
 
 const phases = { focus: "Focus", short: "Short break", long: "Long break" };
 
 function SessionCard({ session, model }: { session: Session; model: Model }) {
   const reading = displayTime(session, model.now);
-  const effectiveLength = session.planned - session.remaining +
-    Math.min(session.remaining, session.routine.kind === "intervals" && session.routine.goal.kind === "focus" && session.phase === "focus"
-      ? Math.max(0, session.routine.goal.amount * minute - session.focusTotal) : session.remaining);
-  const progress = effectiveLength ? 1 - reading.remaining / effectiveLength : 1;
+  const progress = progressOf(session, reading.remaining);
   const primary: TimerAction = session.status === "running" ? "pause" : session.status === "ready" ? "next" : "resume";
   const mainLabel = { pause: "Pause", resume: "Resume", next: "Start next interval" }[primary];
   const send = (action: TimerAction) => void model.update((state, time) => act(state, action, time));
@@ -60,7 +52,7 @@ function Minutes({ label, value, min = 1, max = maxBlockMinutes, set }: {
   </label>;
 }
 
-function PresetSetup({ view, model }: { view: Workspace; model: Model }) {
+function PresetSetup({ view, model, onStart }: { view: Workspace; model: Model; onStart: () => void }) {
   const presets = [...builtIns, ...view.presets];
   const [selected, setSelected] = useState(view.lastPreset);
   const [routine, setRoutine] = useState(() => structuredClone(presets.find(p => p.id === view.lastPreset)!.routine));
@@ -106,7 +98,7 @@ function PresetSetup({ view, model }: { view: Workspace; model: Model }) {
   return (
     <form className="timer-setup" onSubmit={event => {
       event.preventDefault();
-      void model.update((state, time) => startSession(state, routine, selected, time));
+      void model.update((state, time) => startSession(state, routine, selected, time)).then(ok => { if (ok) onStart(); });
     }}>
       {view.result && (
         <p className="result" role="status">
@@ -197,12 +189,12 @@ function PresetSetup({ view, model }: { view: Workspace; model: Model }) {
   );
 }
 
-export function TimerPage({ model }: { model: Model }) {
+export function TimerPage({ model, onStart }: { model: Model; onStart: () => void }) {
   return (
     <>
       <h1 id="page-title">Timer</h1>
       {model.view?.session && <SessionCard session={model.view.session} model={model} />}
-      {model.view && !model.view.session && <PresetSetup view={model.view} model={model} />}
+      {model.view && !model.view.session && <PresetSetup view={model.view} model={model} onStart={onStart} />}
     </>
   );
 }

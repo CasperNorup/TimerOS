@@ -37,12 +37,16 @@ export function useTimer() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [trackingError, setTrackingError] = useState("");
+  const [baselineCue, setBaselineCue] = useState(0);
+  const [restored, setRestored] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
     try {
       const saved = await getSaved();
       const loaded = saved.contents !== null ? decodeWorkspace(saved.contents) : newWorkspace();
+      setBaselineCue(loaded.transition?.id ?? 0);
+      setRestored(loaded.session !== null);
       const time = Date.now();
       if (loaded.session?.status === "running") {
         recover(loaded, time, saved.closedAt);
@@ -142,5 +146,5 @@ export function useTimer() {
     return () => window.clearInterval(interval);
   }, [update, loaded]);
 
-  return { view, now, busy, error, trackingError, update, load };
+  return { view, now, busy, error, trackingError, update, load, baselineCue, restored };
 }
