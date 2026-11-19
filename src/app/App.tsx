@@ -4,6 +4,8 @@ import mark from "../assets/branding/TimerOS-mark-transparent.png";
 import { StartupSplash } from "./StartupSplash";
 import { TimerPage } from "./TimerPage";
 import { useTimer } from "./useTimer";
+import { useDesktop } from "./useDesktop";
+import { DesktopPreferences } from "./DesktopPreferences";
 import type { Interruption, Policy } from "./timer";
 
 const appearances = ["System", "Light", "Dark"] as const;
@@ -32,6 +34,7 @@ export function App() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [page, setPage] = useState<Page>("Timer");
   const timer = useTimer();
+  const desktop = useDesktop(timer);
   const main = useRef<HTMLElement>(null);
   const movedPage = useRef(false);
 
@@ -64,7 +67,14 @@ export function App() {
     setPage(next);
   }
 
-  if (starting) return <StartupSplash onComplete={finishStartup} />;
+  useEffect(() => { if (timer.restored) finishStartup(); }, [timer.restored, finishStartup]);
+
+  if (starting && !timer.view && !timer.error) {
+    return <div className="startup" role="status" aria-label="Starting TimerOS">
+      <img src={mark} alt="" width={108} height={108} />
+    </div>;
+  }
+  if (starting && !timer.restored) return <StartupSplash onComplete={finishStartup} />;
 
   return (
     <div className="app">
@@ -87,9 +97,14 @@ export function App() {
 
       <main ref={main} tabIndex={-1} aria-labelledby="page-title">
         {timer.error && <p className="status-error" role="alert">{timer.error}</p>}
+        {desktop.error && <p className="status-error" role="alert">{desktop.error}</p>}
+        {desktop.report.message && <div className="alert-status">
+          <span role="status">{desktop.report.message}</span>
+          <div className="controls"><button type="button" onClick={() => desktop.command("dismiss")}>Dismiss alert</button></div>
+        </div>}
         {!timer.view && !timer.busy && <button type="button" onClick={() => void timer.load()}>Retry loading timer</button>}
         {page === "Timer" ? (
-          <TimerPage model={timer} />
+          <TimerPage model={timer} onStart={() => desktop.command("start")} />
         ) : (
           <>
             <h1 id="page-title">Settings</h1>
@@ -106,6 +121,7 @@ export function App() {
               </label>
               {saveFailed && <p role="status">This display mode could only be applied for this launch.</p>}
             </section>
+            {timer.view && <DesktopPreferences desktop={desktop} />}
             {timer.view && <section className="panel settings" aria-labelledby="recovery-title">
               <h2 id="recovery-title">Timer recovery</h2>
               {interruptions.map(([event, label]) => (
@@ -123,6 +139,9 @@ export function App() {
               ))}
               {timer.trackingError && <p role="status">{timer.trackingError}</p>}
             </section>}
+            {desktop.available && <div className="controls desktop-buttons">
+              <button type="button" onClick={() => desktop.command("quit")}>Quit TimerOS</button>
+            </div>}
           </>
         )}
       </main>

@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: timeros-windows-${{ github.ref }}
@@ -52,8 +53,27 @@ jobs:
           if ($installers.Count -ne 1) { throw 'Expected one TimerOS Windows installer.' }
           "TIMEROS_VERSION=$version" >> $env:GITHUB_ENV
           "TIMEROS_INSTALLER=$($installers[0].FullName)" >> $env:GITHUB_ENV
+      - name: Download the Phase 1 fixture installer
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 14518051634
+          run-id: 44501772037
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/timeros-previous
       - name: Verify the installed Windows app
-        run: ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER
+        run: |
+          $fixture = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/timeros-previous" -File -Filter '*-setup.exe' -Recurse -ErrorAction SilentlyContinue)
+          if ($fixture.Count -gt 1) { throw 'Expected one Phase 1 fixture installer.' }
+          if ($fixture.Count -eq 1) {
+              ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER -PreviousInstaller $fixture[0].FullName
+          } else {
+              Write-Host 'Previous installer unavailable. Verifying a fresh install.'
+              ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER
+          }
+      - name: Test native layout and pulse timing
+        if: always() && steps.package.outcome == 'success'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release --features tauri/custom-protocol --locked
       - name: Verify the timer and recovery in WebView2
         if: always() && steps.package.outcome == 'success'
         run: |
@@ -61,7 +81,7 @@ jobs:
           $base = Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           $base.app.windows[0].title = 'TimerOS Smoke Test'
           $browserArguments = "--remote-debugging-port=$env:TIMEROS_WEBVIEW_PORT --proxy-server=http://127.0.0.1:1"
-          $base.app.windows[0] | Add-Member -NotePropertyName additionalBrowserArgs -NotePropertyValue $browserArguments
+          $base.app.windows[0].additionalBrowserArgs += " $browserArguments"
           $id = "com.caspernorup.timeros.smoke.$env:GITHUB_RUN_ID.$env:GITHUB_RUN_ATTEMPT"
           $smoke = @{ identifier = $id; app = @{ windows = $base.app.windows } }
           $config = Join-Path $env:RUNNER_TEMP 'timeros-smoke.json'
@@ -75,7 +95,9 @@ jobs:
               try {
                   npm run test:windows -- $scenario
                   if ($LASTEXITCODE -ne 0) { throw "TimerOS $scenario smoke test failed." }
-                  ./tests/windows-signal.ps1 -TargetProcessId $process.Id -Title 'TimerOS Smoke Test' -Signal quit
+                  if ($scenario -eq 'restored') {
+                      ./tests/windows-signal.ps1 -TargetProcessId $process.Id -Title 'TimerOS Smoke Test' -Signal quit
+                  }
                   if (!$process.WaitForExit(10000) -or $process.ExitCode -ne 0) {
                       throw 'The test app did not close cleanly.'
                   }

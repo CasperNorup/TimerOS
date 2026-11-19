@@ -6,12 +6,33 @@ import { chromium } from "playwright";
 const endpoint = "http://127.0.0.1:" + process.env.TIMEROS_WEBVIEW_PORT;
 const scenario = process.argv[2] || "initial";
 const deadline = Date.now() + 25_000;
+const smokeTitle = "TimerOS Smoke Test";
+const miniTitle = "TimerOS Mini Timer";
+const alertTitle = "TimerOS Screen Alert";
 
-function signal(kind) {
+function signal(kind, title = smokeTitle, hotkey = 0) {
   const result = spawnSync("pwsh.exe", ["-NoProfile", "-File", "tests/windows-signal.ps1",
-    "-TargetProcessId", process.env.TIMEROS_TEST_PID, "-Title", "TimerOS Smoke Test", "-Signal", kind],
+    "-TargetProcessId", process.env.TIMEROS_TEST_PID, "-Title", title, "-Signal", kind, "-Hotkey", String(hotkey)],
   { encoding: "utf8" });
   assert.equal(result.status, 0, result.error?.message || result.stderr);
+  return result.stdout.trim();
+}
+
+async function inspectUntil(title, condition) {
+  const deadline = Date.now() + 15_000;
+  let view;
+  do {
+    view = JSON.parse(signal("inspect", title));
+    if (condition(view)) return view;
+    await delay(150);
+  } while (Date.now() < deadline);
+  assert.fail(title + " did not reach the expected state: " + JSON.stringify(view));
+}
+
+function assertPassive(view) {
+  assert.ok(view.visible && view.transparent && view.topmost && view.noActivate && view.layered);
+  assert.equal(view.hit, -1);
+  assert.notEqual(view.handle, view.foreground);
 }
 
 while (true) {
@@ -88,6 +109,7 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await current.getByRole("heading", { name: "Review", exact: true }).waitFor();
   await named("Pause").waitFor();
 
+  await verifySurfaces(page, named);
   signal("lock");
   await current.getByText("Focus · Paused", { exact: true }).waitFor();
   signal("unlock");
@@ -100,4 +122,70 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await page.waitForFunction(previous => document.querySelector(".time")?.textContent !== previous, beforeSleep);
   await named("Pause").waitFor();
   console.log("Verified Bloom, reduced motion, preferences, saved presets, and native Windows lock and sleep message handling.");
+  await named("Settings").click();
+  await named("Quit TimerOS").evaluate(button => button.click());
+}
+
+async function verifySurfaces(page, named) {
+  await inspectUntil(smokeTitle, window => window.minimized);
+  const mini = await inspectUntil(miniTitle, window => window.visible);
+  assertPassive(mini);
+  assert.ok(mini.left >= mini.workLeft && mini.right <= mini.workRight &&
+    mini.top >= mini.workTop && mini.bottom <= mini.workBottom, "Mini timer belongs inside the Windows work area");
+  const hiddenTime = await page.locator(".time").textContent();
+  await page.waitForFunction(before => document.querySelector(".time")?.textContent !== before, hiddenTime,
+    { timeout: 7000 });
+
+  signal("taskbar");
+  await inspectUntil(smokeTitle, window => window.visible && !window.minimized);
+  signal("hotkey", smokeTitle, 1);
+  await named("Resume").waitFor({ timeout: 8000 });
+  signal("hotkey", smokeTitle, 1);
+  await named("Pause").waitFor({ timeout: 8000 });
+
+  await named("Settings").click();
+  await page.getByText("Mini timer", { exact: true }).click();
+  await named("Move mini timer").click();
+  await named("Save position").waitFor();
+  const moving = await inspectUntil(miniTitle, window => window.visible && !window.transparent);
+  assert.equal(moving.hit, 2);
+  signal("shift", miniTitle);
+  await named("Save position").click();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("select"))
+    .some(el => el.labels?.[0]?.textContent.startsWith("Placement") && el.value === "free"));
+  const moved = await inspectUntil(miniTitle, window => window.visible && window.transparent);
+  assertPassive(moved);
+  assert.notEqual(moved.left, mini.left);
+
+  await page.getByText("Alerts and sound", { exact: true }).click();
+  assert.equal(await page.getByRole("checkbox", { name: "Play alert sounds" }).isChecked(), false);
+  assert.equal(await page.getByRole("combobox", { name: "Alert display" }).inputValue(), "all");
+  await page.getByRole("combobox", { name: "Visual style" }).selectOption("static");
+  await page.getByRole("checkbox", { name: "Repeat until dismissed" }).check();
+  await page.getByRole("combobox", { name: "Visual style" }).selectOption("edge");
+  await page.getByRole("combobox", { name: "Visual style" }).selectOption("static");
+
+  for (const layout of ["maximize", "borderless"]) {
+    signal(layout);
+    await named("Preview visual").click();
+    const alert = await inspectUntil(alertTitle, window => window.visible && window.opacity > 0);
+    assertPassive(alert);
+    assert.equal(alert.left, alert.screenLeft);
+    assert.equal(alert.right, alert.screenRight);
+    assert.equal(alert.top, alert.screenTop);
+    assert.equal(alert.bottom, alert.screenBottom);
+    assert.ok(alert.opacity < 255);
+    assertPassive(await inspectUntil(miniTitle, window => window.visible));
+    signal("hotkey", smokeTitle, 5);
+    await inspectUntil(alertTitle, window => !window.visible);
+  }
+
+  // The native close button keeps the active session accessible from the tray or shortcut.
+  signal("quit");
+  await inspectUntil(smokeTitle, window => !window.visible || window.minimized);
+  signal("hotkey", smokeTitle, 4);
+  await inspectUntil(smokeTitle, window => window.visible && !window.minimized);
+  await named("Timer").click();
+  await named("Pause").waitFor();
+  console.log("Verified taskbar restore, click-through mini timer, saved drag placement, maximized and borderless-fullscreen alerts, shortcut dismissal, and close-to-tray.");
 }

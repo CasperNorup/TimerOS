@@ -1,3 +1,5 @@
+import { newDesktopSettings, readDesktopSettings, type DesktopSettings } from "./desktopSettings.ts";
+
 export const minute = 60_000;
 export const maxBlockMinutes = 720;
 
@@ -39,6 +41,7 @@ export type Workspace = {
   result: { name: string; focusTime: number; rounds: number; reason: "finished" | "stopped" } | null;
   transition: Transition | null;
   checkpoint: number;
+  desktop: DesktopSettings;
 };
 export type TimerAction = "pause" | "resume" | "next" | "skip" | "restart" | "add" | "stop";
 
@@ -57,7 +60,7 @@ export function newWorkspace(): Workspace {
   return {
     version: 1, presets: [], nextPreset: 1, lastPreset: "classic",
     policies: { lock: "pause", sleep: "pause", quit: "pause" },
-    session: null, result: null, transition: null, checkpoint: 0,
+    session: null, result: null, transition: null, checkpoint: 0, desktop: newDesktopSettings(),
   };
 }
 
@@ -118,6 +121,7 @@ export function decodeWorkspace(json: string): Workspace {
     const transition = state.transition;
     if (transition !== null && (!integer(transition.id, 1) ||
         !["focus-ended", "break-ended", "finished"].includes(transition.event))) throw new Error();
+    state.desktop = readDesktopSettings(state.desktop);
     return state;
   } catch {
     throw new Error("Saved TimerOS data could not be read. The original file is still available.");
@@ -193,7 +197,7 @@ function consume(session: Session, now: number): void {
 function finish(state: Workspace, session: Session, reason: "finished" | "stopped"): void {
   state.result = { name: session.routine.name, focusTime: session.focusTotal, rounds: session.rounds, reason };
   state.session = null;
-  if (reason === "finished") record(state, "finished");
+  if (reason === "finished" || state.desktop.alertOnStop) record(state, "finished");
 }
 
 function advance(state: Workspace, session: Session, now: number, completed: boolean): void {

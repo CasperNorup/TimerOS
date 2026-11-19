@@ -49,6 +49,9 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(windows)]
     if let Some(window) = app.get_webview_window("main") {
         win::track(&window, app.handle());
+        if let Ok(hwnd) = window.hwnd() {
+            crate::surface::install(hwnd.0);
+        }
     }
     Ok(())
 }
@@ -208,10 +211,15 @@ mod win {
         data: usize,
     ) -> isize {
         if message == DESTROY {
+            crate::surface::shutdown();
             WTSUnRegisterSessionNotification(hwnd);
             RemoveWindowSubclass(hwnd, window_callback, id);
             drop(Box::from_raw(data as *mut tauri::AppHandle));
             return DefSubclassProc(hwnd, message, word, long);
+        }
+        let app = &*(data as *const tauri::AppHandle);
+        if let Some(result) = crate::surface::handle_message(app, message, word, long) {
+            return result;
         }
         let event = match (message, word) {
             (SESSION_CHANGE, 0x07) => Some(("lock", true)),
@@ -221,7 +229,6 @@ mod win {
             _ => None,
         };
         if let Some((kind, active)) = event {
-            let app = &*(data as *const tauri::AppHandle);
             if let Some(state) = app.try_state::<Desktop>() {
                 if let Ok(mut signals) = state.signals.lock() {
                     signals.push(Signal {

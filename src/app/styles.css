@@ -294,3 +294,29 @@ input:focus-visible, summary:focus-visible {
 @media (max-width: 370px) {
   .edit-fields { grid-template-columns: 1fr; }
 }
+
+.desktop-settings { margin-top: .8rem; }
+.desktop-settings + .settings { margin-top: .8rem; }
+.desktop-buttons { justify-content: start; margin-top: .55rem; }
+.desktop-settings input[type="text"] {
+  width: 9rem;
+  min-width: 0;
+  padding: .4rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: .625rem;
+  color: var(--ink);
+  background: var(--canvas);
+  font: inherit;
+}
+.desktop-settings :is(input[type="checkbox"], input[type="range"]) { accent-color: var(--accent); }
+.slider { display: flex; align-items: center; gap: .35rem; }
+.slider input { width: clamp(4.5rem, 18vw, 7rem); }
+.slider output { min-width: 4rem; font-size: .875rem; text-align: right; }
+.help { color: var(--muted); font-size: .875rem; }
+.shortcut-editor + .shortcut-editor { border-top: 1px solid var(--border); margin-top: .75rem; }
+.alert-status {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .6rem .7rem; margin-bottom: .75rem;
+  border: 1px solid var(--border); border-radius: .625rem; background: var(--surface);
+}
+.alert-status .controls { justify-content: end; }

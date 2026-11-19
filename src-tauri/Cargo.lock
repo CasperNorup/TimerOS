@@ -3517,11 +3517,12 @@ dependencies = [
 
 [[package]]
 name = "timeros"
-version = "0.1.3"
+version = "0.2.3"
 dependencies = [
  "serde",
  "tauri",
  "tauri-build",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

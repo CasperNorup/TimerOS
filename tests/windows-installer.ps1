@@ -1,11 +1,24 @@
 param(
-    [Parameter(Mandatory)][string] $Installer
+    [Parameter(Mandatory)][string] $Installer,
+    [string] $PreviousInstaller
 )
 
 $ErrorActionPreference = 'Stop'
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
 $version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'TimerOS.lnk'
+
+if ($PreviousInstaller) {
+    $previousPath = (Resolve-Path -LiteralPath $PreviousInstaller).Path
+    $previous = Start-Process -FilePath $previousPath -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+    if ($previous.ExitCode -ne 0) { throw "TimerOS 0.1.3 fixture installer exited with $($previous.ExitCode)." }
+    $fixtureDir = Join-Path $env:APPDATA 'com.caspernorup.timeros'
+    New-Item -Path $fixtureDir -ItemType Directory -Force | Out-Null
+    $fixture = Join-Path $fixtureDir 'workspace.json'
+    $state = '{"version":1,"presets":[{"id":"custom-1","routine":{"name":"Upgrade fixture","kind":"countdown","focus":12,"short":5,"long":15,"longEvery":4,"autoBreak":true,"autoFocus":true,"goal":{"kind":"open"}}}],"nextPreset":2,"lastPreset":"custom-1","policies":{"lock":"continue","sleep":"pause","quit":"continue"},"session":null,"result":null,"transition":null,"checkpoint":0}'
+    Set-Content -LiteralPath $fixture -Value $state -Encoding utf8NoBOM
+    $originalHash = (Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash
+}
 
 $install = Start-Process -FilePath $installerPath -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
 if ($install.ExitCode -ne 0) { throw "TimerOS installer exited with $($install.ExitCode)." }
@@ -17,6 +30,9 @@ if ($entries.Count -ne 1 -or $entries[0].DisplayVersion -ne $version) {
     throw "Expected one per-user TimerOS installation at version $version."
 }
 if (!(Test-Path -LiteralPath $shortcutPath -PathType Leaf)) { throw 'Missing TimerOS Start menu shortcut.' }
+if ($PreviousInstaller -and (Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash -ne $originalHash) {
+    throw 'The upgrade changed the previous workspace data.'
+}
 
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
@@ -67,4 +83,5 @@ try {
 }
 
 Write-Host "Verified the TimerOS $version per-user install, Start menu shortcut, app icon, and launch."
+if ($PreviousInstaller) { Write-Host 'Verified an in-place upgrade from 0.1.3 preserved the previous workspace.' }
 Write-Host "SHA-256: $((Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash)"
