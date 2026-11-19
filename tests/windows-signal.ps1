@@ -1,4 +1,5 @@
 param(
+    [Parameter(Mandatory)][int] $TargetProcessId,
     [Parameter(Mandatory)][string] $Title,
     [Parameter(Mandatory)][ValidateSet('lock','unlock','sleep','wake','quit','find')][string] $Signal
 )
@@ -7,16 +8,36 @@ if (-not ('TimerOSWindows' -as [type])) {
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class TimerOSWindows {
+    private delegate bool EnumProc(IntPtr window, IntPtr context);
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumProc callback, IntPtr context);
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern IntPtr FindWindow(string className, string windowName);
+    private static extern int GetWindowText(IntPtr window, StringBuilder title, int size);
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool PostMessage(IntPtr window, uint message, UIntPtr wParam, IntPtr lParam);
+    public static IntPtr WindowForProcess(int processId, string expectedTitle) {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows((window, context) => {
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
+            if (owner != (uint)processId) return true;
+            var title = new StringBuilder(256);
+            GetWindowText(window, title, title.Capacity);
+            if (title.ToString() != expectedTitle) return true;
+            result = window;
+            return false;
+        }, IntPtr.Zero);
+        return result;
+    }
 }
 '@
 }
 
-$window = [TimerOSWindows]::FindWindow($null, $Title)
+$window = [TimerOSWindows]::WindowForProcess($TargetProcessId, $Title)
 if ($Signal -eq 'find') { return $window -ne [IntPtr]::Zero }
 if ($window -eq [IntPtr]::Zero) { throw "No window found with title $Title." }
 

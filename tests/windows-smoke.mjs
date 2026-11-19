@@ -9,7 +9,8 @@ const deadline = Date.now() + 25_000;
 
 function signal(kind) {
   const result = spawnSync("pwsh.exe", ["-NoProfile", "-File", "tests/windows-signal.ps1",
-    "-Title", "TimerOS Smoke Test", "-Signal", kind], { encoding: "utf8" });
+    "-TargetProcessId", process.env.TIMEROS_TEST_PID, "-Title", "TimerOS Smoke Test", "-Signal", kind],
+  { encoding: "utf8" });
   assert.equal(result.status, 0, result.error?.message || result.stderr);
 }
 

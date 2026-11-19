@@ -49,16 +49,16 @@ $canonicalIcon.Dispose()
 $expected.Dispose()
 if ($ratio -lt .8) { throw "Installed executable icon differs from the official TimerOS icon ($ratio match)." }
 
-$application = Start-Process -FilePath $executable -PassThru -WindowStyle Hidden
+$application = Start-Process -FilePath $executable -PassThru -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $executable)
 try {
     $deadline = [DateTime]::UtcNow.AddSeconds(20)
     do {
         if ($application.HasExited) { throw "Installed TimerOS exited with $($application.ExitCode)." }
-        if (./tests/windows-signal.ps1 -Title 'TimerOS' -Signal find) { break }
+        if (./tests/windows-signal.ps1 -TargetProcessId $application.Id -Title 'TimerOS' -Signal find) { break }
         if ([DateTime]::UtcNow -gt $deadline) { throw 'The installed TimerOS window did not open.' }
         Start-Sleep -Milliseconds 300
     } while ($true)
-    ./tests/windows-signal.ps1 -Title 'TimerOS' -Signal quit
+    ./tests/windows-signal.ps1 -TargetProcessId $application.Id -Title 'TimerOS' -Signal quit
     if (!$application.WaitForExit(10000) -or $application.ExitCode -ne 0) {
         throw 'Installed TimerOS did not close cleanly.'
     }

@@ -39,9 +39,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: true
       - run: npm ci
       - run: npm test
       - name: Build the Windows installer
+        id: package
         run: |
           npm run tauri -- build -- --locked
           if ($LASTEXITCODE -ne 0) { throw 'TimerOS installer build failed.' }
@@ -53,6 +55,7 @@ jobs:
       - name: Verify the installed Windows app
         run: ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER
       - name: Verify the timer and recovery in WebView2
+        if: always() && steps.package.outcome == 'success'
         run: |
           $env:TIMEROS_WEBVIEW_PORT = '9238'
           $base = Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
@@ -68,10 +71,11 @@ jobs:
           $exe = (Resolve-Path -LiteralPath 'src-tauri/target/release/timeros.exe').Path
           foreach ($scenario in @('initial','restored')) {
               $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+              $env:TIMEROS_TEST_PID = $process.Id
               try {
                   npm run test:windows -- $scenario
                   if ($LASTEXITCODE -ne 0) { throw "TimerOS $scenario smoke test failed." }
-                  ./tests/windows-signal.ps1 -Title 'TimerOS Smoke Test' -Signal quit
+                  ./tests/windows-signal.ps1 -TargetProcessId $process.Id -Title 'TimerOS Smoke Test' -Signal quit
                   if (!$process.WaitForExit(10000) -or $process.ExitCode -ne 0) {
                       throw 'The test app did not close cleanly.'
                   }
@@ -79,7 +83,8 @@ jobs:
                   if (!$process.HasExited) { Stop-Process -Id $process.Id }
               }
           }
-      - name: Upload the verified Windows installer
+      - name: Upload the Windows installer
+        if: always() && steps.package.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: TimerOS-${{ env.TIMEROS_VERSION }}-Windows-x64
