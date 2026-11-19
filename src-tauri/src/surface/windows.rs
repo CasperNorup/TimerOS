@@ -114,6 +114,7 @@ struct DesktopUi {
     last_token: String,
     message: String,
     moving: bool,
+    quitting: bool,
     actions: Vec<&'static str>,
     tray: bool,
     taskbar_created: u32,
@@ -124,7 +125,7 @@ pub fn install(main: HWND) {
         let mut ui = DesktopUi {
             main, mini: None, overlays: Vec::new(), frame: None, displays: displays(),
             shortcuts: None, shortcut_errors: vec![None; 5], pulse: None, recent_pulse: None,
-            last_token: String::new(), message: String::new(), moving: false, actions: Vec::new(),
+            last_token: String::new(), message: String::new(), moving: false, quitting: false, actions: Vec::new(),
             tray: false, taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
         };
         ui.tray = unsafe { Shell_NotifyIconW(NIM_ADD, &ui.tray_data()) } != 0;
@@ -136,11 +137,25 @@ pub fn keep_running_on_close() -> Option<bool> {
     DESKTOP.with(|cell| {
         let ui = cell.try_borrow().ok()?;
         let ui = ui.as_ref()?;
-        ui.frame.as_ref()?.active.then_some(ui.tray)
+        (!ui.quitting && ui.frame.as_ref()?.active).then_some(ui.tray)
     })
 }
 
 pub fn shutdown() { DESKTOP.with(|cell| { let _ = cell.try_borrow_mut().map(|mut ui| ui.take()); }); }
+
+fn request_quit(app: &AppHandle) {
+    let posted = DESKTOP.with(|cell| {
+        let mut holder = cell.borrow_mut();
+        let Some(ui) = holder.as_mut() else { return false };
+        ui.quitting = true;
+        ui.moving = false;
+        ui.dismiss();
+        ui.mini.take();
+        // Let the main window follow the ordinary close and recovery lifecycle.
+        unsafe { PostMessageW(ui.main, WM_CLOSE, 0, 0) != 0 }
+    });
+    if !posted { app.exit(0); }
+}
 
 impl Drop for DesktopUi {
     fn drop(&mut self) {
@@ -195,7 +210,7 @@ pub fn present(app: &AppHandle, mut frame: Frame) -> Report {
         Some("start") => {
             if let Some(window) = app.get_webview_window("main") { let _ = window.minimize(); }
         }
-        Some("quit") => app.exit(0),
+        Some("quit") => request_quit(app),
         _ => {}
     }
     report
@@ -259,6 +274,7 @@ impl DesktopUi {
     }
 
     fn render(&mut self, now: Instant) {
+        if self.quitting { return; }
         let mut tint = None;
         let mut done = false;
         if let Some(pulse) = &self.pulse {
@@ -448,7 +464,7 @@ pub fn handle_message(app: &AppHandle, message: u32, w: WPARAM, l: LPARAM) -> Op
                 let _ = main.set_focus();
             }
         }
-        6 => app.exit(0),
+        6 => request_quit(app),
         _ => {}
     }
     Some(0)

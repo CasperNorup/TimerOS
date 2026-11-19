@@ -89,8 +89,10 @@ jobs:
           npm run tauri -- build --no-bundle --config $config -- --locked
           if ($LASTEXITCODE -ne 0) { throw 'TimerOS smoke build failed.' }
           $exe = (Resolve-Path -LiteralPath 'src-tauri/target/release/timeros.exe').Path
+          $env:RUST_BACKTRACE = '1'
           foreach ($scenario in @('initial','restored')) {
-              $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+              $appErrors = Join-Path $env:RUNNER_TEMP "timeros-$scenario-stderr.log"
+              $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -RedirectStandardError $appErrors
               $env:TIMEROS_TEST_PID = $process.Id
               try {
                   npm run test:windows -- $scenario
@@ -98,11 +100,15 @@ jobs:
                   if ($scenario -eq 'restored') {
                       ./tests/windows-signal.ps1 -TargetProcessId $process.Id -Title 'TimerOS Smoke Test' -Signal quit
                   }
-                  if (!$process.WaitForExit(10000) -or $process.ExitCode -ne 0) {
-                      throw 'The test app did not close cleanly.'
+                  if (!$process.WaitForExit(10000)) {
+                      throw 'The test app was still running after Quit.'
+                  }
+                  if ($process.ExitCode -ne 0) {
+                      throw "The test app exited with code $($process.ExitCode)."
                   }
               } finally {
                   if (!$process.HasExited) { Stop-Process -Id $process.Id }
+                  if (Test-Path -LiteralPath $appErrors) { Get-Content -LiteralPath $appErrors }
               }
           }
       - name: Upload the Windows installer

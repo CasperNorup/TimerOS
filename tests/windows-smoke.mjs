@@ -59,6 +59,12 @@ try {
     await current.getByRole("heading", { name: "Review", exact: true }).waitFor();
     await named("Resume").click();
     await named("Pause").waitFor();
+    await named("Settings").click();
+    await page.getByText("Mini timer", { exact: true }).click();
+    assert.equal(await page.getByRole("combobox", { name: "Placement" }).inputValue(), "free");
+    await page.getByText("Alerts and sound", { exact: true }).click();
+    assert.equal(await page.getByRole("checkbox", { name: "Repeat until dismissed" }).isChecked(), true);
+    await named("Timer").click();
     await named("Stop").click();
     await page.getByText(/Session stopped/).waitFor();
     console.log("Verified a clean app restart restores an unfinished session in the paused state.");
