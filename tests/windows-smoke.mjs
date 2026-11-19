@@ -82,6 +82,32 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await heading.waitFor({ timeout: 12_000 });
   assert.equal(await page.getByText("25:00", { exact: true }).count(), 1);
   assert.match(await page.locator("footer").innerText(), /^TimerOS \d+\.\d+\.\d+$/);
+  const headerIcon = await page.locator(".brand img").evaluate(async image => {
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0);
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let left = canvas.width, top = canvas.height, right = 0, bottom = 0;
+    for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+      if (data[(y * canvas.width + x) * 4 + 3] < 16) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x + 1);
+      bottom = Math.max(bottom, y + 1);
+    }
+    return {
+      asset: image.src,
+      slot: image.getBoundingClientRect().width,
+      visible: 34 * Math.max(right - left, bottom - top) / canvas.width,
+    };
+  });
+  assert.match(headerIcon.asset, /TimerOS-app-icon-transparent/);
+  assert.equal(headerIcon.slot, 34);
+  assert.ok(Math.abs(headerIcon.visible - 32.7) < 0.25, "The transparent T matches the approved BudgetOS scale");
+  console.log("Verified the transparent TimerOS mark at the approved size in the app header.");
 
   await page.getByRole("button", { name: "Settings" }).click();
   const mode = page.getByRole("combobox", { name: "Display mode" });

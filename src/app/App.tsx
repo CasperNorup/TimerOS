@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { version } from "../../package.json";
 import mark from "../assets/branding/TimerOS-mark-transparent.png";
+import appIcon from "../assets/branding/TimerOS-app-icon-transparent.png";
 import { StartupSplash } from "./StartupSplash";
 import { TimerPage } from "./TimerPage";
 import { useTimer } from "./useTimer";
@@ -80,7 +81,7 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <div className="brand">
-          <img src={mark} alt="" width={34} height={34} />
+          <img src={appIcon} alt="" width={34} height={34} />
           <span>TimerOS</span>
         </div>
         <nav aria-label="Main navigation">

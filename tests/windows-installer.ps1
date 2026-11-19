@@ -5,13 +5,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
-$version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+$config = Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+$version = $config.version
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'TimerOS.lnk'
 
 if ($PreviousInstaller) {
     $previousPath = (Resolve-Path -LiteralPath $PreviousInstaller).Path
     $previous = Start-Process -FilePath $previousPath -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
-    if ($previous.ExitCode -ne 0) { throw "TimerOS 0.1.3 fixture installer exited with $($previous.ExitCode)." }
+    if ($previous.ExitCode -ne 0) { throw "The previous TimerOS installer exited with $($previous.ExitCode)." }
     $fixtureDir = Join-Path $env:APPDATA 'com.caspernorup.timeros'
     New-Item -Path $fixtureDir -ItemType Directory -Force | Out-Null
     $fixture = Join-Path $fixtureDir 'workspace.json'
@@ -42,28 +43,40 @@ if (!(Test-Path -LiteralPath $executable -PathType Leaf) -or (Split-Path -Leaf $
 }
 
 Add-Type -AssemblyName System.Drawing
-$actual = [System.Drawing.Icon]::ExtractAssociatedIcon($executable).ToBitmap()
-$iconPath = (Resolve-Path -LiteralPath 'src-tauri/icons/icon.ico').Path
-$canonicalIcon = [System.Drawing.Icon]::new($iconPath, $actual.Width, $actual.Height)
-$expected = $canonicalIcon.ToBitmap()
-$matches = 0
-for ($y = 0; $y -lt $actual.Height; $y++) {
-    for ($x = 0; $x -lt $actual.Width; $x++) {
-        $a = $actual.GetPixel($x, $y)
-        $b = $expected.GetPixel($x, $y)
-        $colorDifference = [Math]::Abs([int]$a.R - $b.R) +
-            [Math]::Abs([int]$a.G - $b.G) + [Math]::Abs([int]$a.B - $b.B)
-        $alphaDifference = [Math]::Abs([int]$a.A - $b.A)
-        if ($alphaDifference -le 32 -and (($a.A -lt 32 -and $b.A -lt 32) -or $colorDifference -le 60)) {
-            $matches++
+$appIcon = $config.bundle.icon | Where-Object { $_ -like '*.ico' } | Select-Object -First 1
+$iconPath = (Resolve-Path -LiteralPath (Join-Path 'src-tauri' $appIcon)).Path
+function Assert-TimerOSIcon([string] $ProgramPath, [string] $Label) {
+    $programIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($ProgramPath)
+    if (!$programIcon) { throw "Could not read the $Label icon." }
+    $actual = $programIcon.ToBitmap()
+    $canonical = [System.Drawing.Icon]::new($iconPath, $actual.Width, $actual.Height)
+    $expected = $canonical.ToBitmap()
+    try {
+        $matches = 0
+        for ($y = 0; $y -lt $actual.Height; $y++) {
+            for ($x = 0; $x -lt $actual.Width; $x++) {
+                $a = $actual.GetPixel($x, $y)
+                $b = $expected.GetPixel($x, $y)
+                $colorDifference = [Math]::Abs([int]$a.R - $b.R) +
+                    [Math]::Abs([int]$a.G - $b.G) + [Math]::Abs([int]$a.B - $b.B)
+                $alphaDifference = [Math]::Abs([int]$a.A - $b.A)
+                if ($alphaDifference -le 32 -and (($a.A -lt 32 -and $b.A -lt 32) -or $colorDifference -le 60)) {
+                    $matches++
+                }
+            }
         }
+        $ratio = $matches / ($actual.Width * $actual.Height)
+        if ($ratio -lt .8) { throw "The $Label icon differs from the transparent TimerOS mark ($ratio match)." }
+    } finally {
+        $expected.Dispose()
+        $canonical.Dispose()
+        $actual.Dispose()
+        $programIcon.Dispose()
     }
 }
-$ratio = $matches / ($actual.Width * $actual.Height)
-$actual.Dispose()
-$canonicalIcon.Dispose()
-$expected.Dispose()
-if ($ratio -lt .8) { throw "Installed executable icon differs from the official TimerOS icon ($ratio match)." }
+
+Assert-TimerOSIcon -ProgramPath $executable -Label 'installed app'
+Assert-TimerOSIcon -ProgramPath $installerPath -Label 'installer'
 
 $application = Start-Process -FilePath $executable -PassThru -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $executable)
 try {
@@ -83,5 +96,6 @@ try {
 }
 
 Write-Host "Verified the TimerOS $version per-user install, Start menu shortcut, app icon, and launch."
-if ($PreviousInstaller) { Write-Host 'Verified an in-place upgrade from 0.1.3 preserved the previous workspace.' }
+Write-Host 'Verified the transparent icon in the app executable and installer.'
+if ($PreviousInstaller) { Write-Host 'Verified reinstalling over the previous preview preserved the workspace.' }
 Write-Host "SHA-256: $((Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash)"

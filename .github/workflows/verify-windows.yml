@@ -53,18 +53,18 @@ jobs:
           if ($installers.Count -ne 1) { throw 'Expected one TimerOS Windows installer.' }
           "TIMEROS_VERSION=$version" >> $env:GITHUB_ENV
           "TIMEROS_INSTALLER=$($installers[0].FullName)" >> $env:GITHUB_ENV
-      - name: Download the Phase 1 fixture installer
+      - name: Download the previous preview installer
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: 14518051634
-          run-id: 44501772037
+          artifact-ids: 14520421707
+          run-id: 44507585718
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ runner.temp }}/timeros-previous
       - name: Verify the installed Windows app
         run: |
           $fixture = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/timeros-previous" -File -Filter '*-setup.exe' -Recurse -ErrorAction SilentlyContinue)
-          if ($fixture.Count -gt 1) { throw 'Expected one Phase 1 fixture installer.' }
+          if ($fixture.Count -gt 1) { throw 'Expected one previous preview installer.' }
           if ($fixture.Count -eq 1) {
               ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER -PreviousInstaller $fixture[0].FullName
           } else {
