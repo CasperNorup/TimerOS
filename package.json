@@ -1,12 +1,13 @@
 {
   "name": "timeros",
-  "version": "0.4.3",
+  "version": "0.5.3",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.2.3 --port 1420 --strictPort",
+    "dev": "node scripts/build-notices.mjs && vite --host 127.0.2.3 --port 1420 --strictPort",
     "dev:windows": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "build": "tsc --noEmit && vite build",
+    "build:windows": "node scripts/build-notices.mjs --windows && npm run build",
     "tauri": "tauri",
     "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.ts",
     "test:windows": "node tests/windows-smoke.mjs"

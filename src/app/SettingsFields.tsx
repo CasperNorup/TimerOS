@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { hexColor } from "./appearance";
+import { ColorPicker } from "./ColorPicker";
+import { useLocale } from "./locale";
 
 export function Range({ label, value, min, max, step = 1, suffix, change }: {
   label: string; value: number; min: number; max: number; step?: number; suffix?: string; change: (value: number) => void;
@@ -17,6 +19,8 @@ export function Range({ label, value, min, max, step = 1, suffix, change }: {
 export function Color({ label, value, change }: { label: string; value: string; change: (value: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
+  const [open, setOpen] = useState(false);
+  const { t } = useLocale();
 
   function commit() {
     if (draft === null) return;
@@ -29,14 +33,10 @@ export function Color({ label, value, change }: { label: string; value: string; 
   }
 
   return <div className="setting-row color-row">
-    <label>{label}
-      <input type="color" value={value} onChange={event => {
-        setDraft(null);
-        setInvalid(false);
-        change(event.currentTarget.value);
-      }} />
-    </label>
-    <input type="text" aria-label={label + " hex"} aria-invalid={invalid || undefined} value={draft ?? value}
+    <span className="color-label">{label}</span>
+    <button type="button" className="color-trigger" aria-label={t("Pick {color}", { color: label })}
+      aria-haspopup="dialog" style={{ backgroundColor: value }} onClick={() => setOpen(true)} />
+    <input type="text" aria-label={label + " " + t("hex")} aria-invalid={invalid || undefined} value={draft ?? value}
       maxLength={7} onChange={event => {
         setDraft(event.currentTarget.value);
         setInvalid(false);
@@ -46,6 +46,11 @@ export function Color({ label, value, change }: { label: string; value: string; 
           commit();
         }
       }} />
-    {invalid && <span className="help" role="status">Enter a color such as #174ba7.</span>}
+    {invalid && <span className="help" role="status">{t("Enter a color such as #174ba7.")}</span>}
+    {open && <ColorPicker label={label} value={value} close={() => setOpen(false)} commit={color => {
+      setDraft(null);
+      setInvalid(false);
+      change(color);
+    }} />}
   </div>;
 }

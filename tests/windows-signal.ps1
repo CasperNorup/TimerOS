@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][int] $TargetProcessId,
     [Parameter(Mandatory)][string] $Title,
-    [Parameter(Mandatory)][ValidateSet('lock','unlock','sleep','wake','quit','find','inspect','hotkey','shift','maximize','borderless','taskbar')][string] $Signal,
+    [Parameter(Mandatory)][ValidateSet('lock','unlock','sleep','wake','quit','find','inspect','sample','hotkey','shift','maximize','borderless','taskbar')][string] $Signal,
     [int] $Hotkey = 0
 )
 $ErrorActionPreference = 'Stop'
@@ -69,6 +69,26 @@ public static class TimerOSWindows {
 
 $window = [TimerOSWindows]::WindowForProcess($TargetProcessId, $Title)
 if ($Signal -eq 'find') { return $window -ne [IntPtr]::Zero }
+if ($Signal -eq 'sample') {
+    $pending = [Diagnostics.Stopwatch]::StartNew()
+    while ($window -eq [IntPtr]::Zero -and $pending.ElapsedMilliseconds -lt 5000) {
+        Start-Sleep -Milliseconds 15
+        $window = [TimerOSWindows]::WindowForProcess($TargetProcessId, $Title)
+    }
+    if ($window -eq [IntPtr]::Zero) { throw "Could not sample $Title." }
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    $levels = [Collections.Generic.HashSet[int]]::new()
+    while ($clock.ElapsedMilliseconds -lt 2600) {
+        $alpha = [byte]0
+        $key = [uint32]0
+        $flags = [uint32]0
+        if ([TimerOSWindows]::GetLayeredWindowAttributes($window, [ref]$key, [ref]$alpha, [ref]$flags) -and $alpha -gt 0) {
+            [void] $levels.Add($alpha)
+        }
+        Start-Sleep -Milliseconds 7
+    }
+    return (@{ levels = $levels.Count; elapsedMs = $clock.ElapsedMilliseconds } | ConvertTo-Json -Compress)
+}
 if ($Signal -eq 'inspect' -and $window -eq [IntPtr]::Zero) {
     return (@{ found = $false; visible = $false } | ConvertTo-Json -Compress)
 }

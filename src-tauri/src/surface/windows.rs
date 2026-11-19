@@ -1,4 +1,4 @@
-use super::panel::{rgb, wide, Bounds, Paint, Panel, Shape};
+use super::panel::{mix, rgb, wide, Bounds, Paint, Panel, Shape};
 use super::{Alert, DisplayInfo, Frame, FreePosition, Report};
 use std::cell::RefCell;
 use std::mem::{size_of, zeroed};
@@ -20,6 +20,8 @@ use windows_sys::Win32::{
 const TRAY_MESSAGE: u32 = WM_APP + 13;
 const ALERT_TIMER: usize = 271;
 const MIN_PULSE_MS: u64 = 2000;
+const FADE_FRAME_MS: u32 = 16;
+const WAIT_FRAME_MS: u32 = 100;
 const ACTIONS: [&str; 5] = ["pause", "next", "mini", "open", "dismiss"];
 
 #[link(name = "shcore")]
@@ -93,11 +95,23 @@ impl Pulse {
         if !self.alert.repeat && cycle >= self.alert.count.clamp(1, 6) { return None; }
         let cap = self.alert.opacity.clamp(5, 55) as f64 * 255.0 / 100.0;
         let step = elapsed % period;
-        let level = if reduced || self.alert.style == "static" { 1.0 }
+        let level = if self.still(reduced) { 1.0 }
             else if step < fade { step as f64 / fade as f64 }
             else if step < 2 * fade { (2 * fade - step) as f64 / fade as f64 }
             else { 0.0 };
-        Some((cycle, (cap * level).round() as u8))
+        let eased = level * level * (3.0 - 2.0 * level);
+        Some((cycle, (cap * eased).round() as u8))
+    }
+
+    fn still(&self, reduced: bool) -> bool { reduced || self.alert.style == "static" }
+
+    fn interval(&self, now: Instant, reduced: bool) -> u32 {
+        let remaining = |ms: u64| ms.clamp(1, u64::from(WAIT_FRAME_MS)) as u32;
+        if now < self.start { return remaining((self.start - now).as_millis() as u64); }
+        let (fade, period) = self.timing();
+        let step = (now - self.start).as_millis() as u64 % period;
+        if !self.still(reduced) && step < 2 * fade { FADE_FRAME_MS }
+        else { remaining(period - step) }
     }
 }
 
@@ -110,6 +124,7 @@ struct DesktopUi {
     shortcuts: Option<[String; 5]>,
     shortcut_errors: Vec<Option<String>>,
     pulse: Option<Pulse>,
+    alert_interval: Option<u32>,
     recent_pulse: Option<Instant>,
     last_token: String,
     message: String,
@@ -124,7 +139,7 @@ pub fn install(main: HWND) {
     DESKTOP.with(|cell| {
         let mut ui = DesktopUi {
             main, mini: None, overlays: Vec::new(), frame: None, displays: displays(),
-            shortcuts: None, shortcut_errors: vec![None; 5], pulse: None, recent_pulse: None,
+            shortcuts: None, shortcut_errors: vec![None; 5], pulse: None, alert_interval: None, recent_pulse: None,
             last_token: String::new(), message: String::new(), moving: false, quitting: false, actions: Vec::new(),
             tray: false, taskbar_created: unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
         };
@@ -195,10 +210,11 @@ pub fn present(app: &AppHandle, mut frame: Frame) -> Report {
             _ => {}
         }
         if let Some(alert) = alert { ui.begin_alert(alert); }
-        let previous_active = ui.frame.as_ref().map(|frame| frame.active);
+        let tip_changed = ui.frame.as_ref().is_none_or(|previous|
+            previous.active != frame.active || previous.language != frame.language);
         ui.frame = Some(frame);
-        if previous_active != ui.frame.as_ref().map(|frame| frame.active) { ui.update_tip(); }
-        ui.render(Instant::now());
+        if tip_changed { ui.update_tip(); }
+        ui.render(Instant::now(), true);
         Report {
             actions: std::mem::take(&mut ui.actions),
             displays: ui.displays.iter().map(|screen| screen.info.clone()).collect(),
@@ -238,7 +254,7 @@ impl DesktopUi {
             if chord.is_empty() { continue; }
             match parse_shortcut(chord) {
                 Some((mods, key)) if unsafe { RegisterHotKey(self.main, index as i32 + 1, mods, key) } != 0 => {}
-                _ => self.shortcut_errors[index] = Some(format!("{chord} is unavailable in Windows.")),
+                _ => self.shortcut_errors[index] = Some(chord.clone()),
             }
         }
         self.shortcuts = Some(shortcuts.clone());
@@ -258,9 +274,6 @@ impl DesktopUi {
             let start = self.recent_pulse.map(|last| last + Duration::from_millis(MIN_PULSE_MS))
                 .map_or(now, |next| next.max(now));
             self.pulse = Some(Pulse { alert, start });
-            unsafe { SetTimer(self.main, ALERT_TIMER, 50, None); }
-        } else {
-            unsafe { KillTimer(self.main, ALERT_TIMER); }
         }
         self.update_tip();
     }
@@ -269,17 +282,33 @@ impl DesktopUi {
         self.message.clear();
         self.pulse = None;
         self.overlays.clear();
-        unsafe { KillTimer(self.main, ALERT_TIMER); }
+        self.arm_alert(None);
         self.update_tip();
     }
 
-    fn render(&mut self, now: Instant) {
+    fn arm_alert(&mut self, interval: Option<u32>) {
+        if self.alert_interval == interval { return; }
+        unsafe {
+            if let Some(ms) = interval { SetTimer(self.main, ALERT_TIMER, ms, None); }
+            else { KillTimer(self.main, ALERT_TIMER); }
+        }
+        self.alert_interval = interval;
+    }
+
+    fn label<'a>(&self, en: &'a str, da: &'a str) -> &'a str {
+        if self.frame.as_ref().is_some_and(|frame| frame.language == "da") { da } else { en }
+    }
+
+    fn render(&mut self, now: Instant, refresh_mini: bool) {
         if self.quitting { return; }
+        let mini_cue = self.pulse.as_ref().is_some_and(|pulse| pulse.alert.target == "mini");
+        let mut interval = None;
         let mut tint = None;
         let mut done = false;
         if let Some(pulse) = &self.pulse {
             let reduced = self.frame.as_ref().is_some_and(|f| f.reduced_motion);
             if let Some((cycle, opacity)) = pulse.opacity(now, reduced) {
+                interval = Some(pulse.interval(now, reduced));
                 if opacity > 0 {
                     let onset = pulse.start + Duration::from_millis(cycle * pulse.timing().1);
                     self.recent_pulse = Some(onset);
@@ -291,8 +320,8 @@ impl DesktopUi {
                 } else {
                     let monochrome = pulse.alert.style == "edge";
                     let area = if pulse.alert.target == "selected" {
-                        selected(&self.displays, &pulse.alert.monitor).into_iter().collect::<Vec<_>>()
-                    } else { self.displays.iter().collect() };
+                        selected(&self.displays, &pulse.alert.monitor).map_or(&[][..], std::slice::from_ref)
+                    } else { &self.displays[..] };
                     self.overlays.truncate(area.len());
                     while self.overlays.len() < area.len() {
                         if let Some(panel) = Panel::new("TimerOS Screen Alert") { self.overlays.push(panel); }
@@ -311,9 +340,9 @@ impl DesktopUi {
         if done {
             self.pulse = None;
             self.overlays.clear();
-            unsafe { KillTimer(self.main, ALERT_TIMER); }
         }
-        self.render_mini(tint);
+        self.arm_alert(interval);
+        if refresh_mini || mini_cue { self.render_mini(tint); }
     }
 
     fn render_mini(&mut self, tint: Option<(u32, u8)>) {
@@ -337,30 +366,39 @@ impl DesktopUi {
             _ => (1.0, 1.0),
         };
         let mut detail = Vec::new();
-        if self.moving { detail.push("Drag to move".to_owned()); }
+        if self.moving { detail.push(self.label("Drag to move", "Træk for at flytte").to_owned()); }
         else {
             if prefs.show_phase { detail.push(frame.phase.clone()); }
-            if prefs.show_rounds { detail.push(format!("{} rounds", frame.rounds)); }
+            if prefs.show_rounds { detail.push(format!("{} {}", frame.rounds, self.label("rounds", "runder"))); }
             if !frame.active && cue_on_mini { detail.push(self.message.clone()); }
         }
-        let height = if detail.is_empty() { 43.0 } else { 58.0 };
-        let bounds = screen.work.place((164.0 * scale).round() as i32,
+        let clock_scale = prefs.clock_scale.clamp(80, 140) as f64 / 100.0;
+        let extra = (clock_scale - 1.0).max(0.0);
+        let height = if detail.is_empty() { 43.0 } else { 58.0 } + 24.0 * extra;
+        let width = 164.0 + 68.0 * extra;
+        let bounds = screen.work.place((width * scale).round() as i32,
             (height * scale).round() as i32, padding, x, y);
         let existing = self.mini.is_some();
         if self.mini.is_none() { self.mini = Panel::new("TimerOS Mini Timer"); }
         let Some(mini) = self.mini.as_mut() else { return };
         let bg = rgb(&prefs.color, 0x00351e11);
+        let tint_color = |bg| tint.map_or(bg, |(color, alpha)| mix(bg, color, alpha));
+        let gradient = (!prefs.inherit_theme && prefs.background_kind == "gradient")
+            .then(|| (tint_color(rgb(&prefs.background_end, bg)), prefs.gradient_direction == "vertical"));
         let show_clock = prefs.show_time
             || (frame.active && frame.progress.is_none() && !prefs.show_phase && !prefs.show_rounds);
         mini.draw(Paint {
-            color: bg, text: rgb(&prefs.text, 0x00ffffff), accent: rgb(&prefs.accent, 0x00ffb173),
+            color: tint_color(bg), text: rgb(&prefs.text, 0x00ffffff), accent: rgb(&prefs.accent, 0x00ffb173),
             clock: if show_clock && (frame.active || self.moving) { frame.clock.clone() } else { String::new() },
             detail: detail.join(" · "),
             progress: if prefs.show_progress { frame.progress.map(|p| p.clamp(0.0, 1.0)) } else { None },
             thin: prefs.progress_style == "line", movable: self.moving, scale,
-            cue: tint.map(|(color, alpha)| mix(bg, color, alpha)),
+            gradient, clock_scale, font: prefs.font.clone(),
+            clock_weight: match prefs.clock_weight.as_str() { "regular" => 400, "bold" => 750, _ => 650 },
         });
-        mini.move_to(bounds, Shape::Round((14.0 * scale).round() as i32), !self.moving || !existing);
+        let rounding = prefs.roundness.min(24);
+        let shape = if rounding == 0 { Shape::Rect } else { Shape::Round((rounding as f64 * scale).round() as i32) };
+        mini.move_to(bounds, shape, !self.moving || !existing);
         mini.show(true, ((prefs.opacity.clamp(35, 100) as u16 * 255) / 100) as u8);
     }
 
@@ -377,7 +415,7 @@ impl DesktopUi {
             if data.hIcon.is_null() { data.hIcon = LoadIconW(null_mut(), IDI_APPLICATION); }
         }
         let label = if !self.message.is_empty() { format!("TimerOS · {}", self.message) }
-            else if self.frame.as_ref().is_some_and(|f| f.active) { "TimerOS · Session active".into() }
+            else if self.frame.as_ref().is_some_and(|f| f.active) { self.label("TimerOS · Session active", "TimerOS · Session i gang").into() }
             else { "TimerOS".into() };
         let capacity = data.szTip.len() - 1;
         for (target, ch) in data.szTip.iter_mut().zip(label.encode_utf16().take(capacity)) {
@@ -400,13 +438,13 @@ impl DesktopUi {
             let item = |id, label, enabled| {
                 AppendMenuW(menu, MF_STRING | if enabled { 0 } else { MF_GRAYED }, id, wide(label).as_ptr())
             };
-            item(4, "Open TimerOS", true);
-            item(1, if paused { "Resume" } else { "Pause" }, active && !ready);
-            item(2, "Start next interval", ready);
-            item(3, "Show / Hide mini timer", true);
-            item(5, "Dismiss alert", !self.message.is_empty());
+            item(4, self.label("Open TimerOS", "Åbn TimerOS"), true);
+            item(1, if paused { self.label("Resume", "Fortsæt") } else { "Pause" }, active && !ready);
+            item(2, self.label("Start next interval", "Start næste interval"), ready);
+            item(3, self.label("Show / Hide mini timer", "Vis eller skjul minitimer"), true);
+            item(5, self.label("Dismiss alert", "Luk besked"), !self.message.is_empty());
             AppendMenuW(menu, MF_SEPARATOR, 0, null());
-            item(6, "Quit TimerOS", true);
+            item(6, self.label("Quit TimerOS", "Afslut TimerOS"), true);
             let mut point = POINT::default();
             GetCursorPos(&mut point);
             SetForegroundWindow(self.main);
@@ -419,14 +457,6 @@ impl DesktopUi {
     }
 }
 
-fn mix(base: u32, target: u32, opacity: u8) -> u32 {
-    [0, 8, 16].into_iter().map(|s| {
-        let a = u32::from(opacity);
-        let c = (((base >> s) & 255) * (255 - a) + ((target >> s) & 255) * a) / 255;
-        c << s
-    }).sum()
-}
-
 pub fn handle_message(app: &AppHandle, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESULT> {
     let outcome = DESKTOP.with(|cell| {
         let mut holder = cell.try_borrow_mut().ok()?;
@@ -437,12 +467,12 @@ pub fn handle_message(app: &AppHandle, message: u32, w: WPARAM, l: LPARAM) -> Op
             } else {
                 match message {
                     WM_TIMER if w == ALERT_TIMER => {
-                        ui.render(Instant::now());
+                        ui.render(Instant::now(), false);
                         return Some(0);
                     }
                     WM_DISPLAYCHANGE | WM_SETTINGCHANGE => {
                         ui.displays = displays();
-                        ui.render(Instant::now());
+                        ui.render(Instant::now(), true);
                         return None;
                     }
                     _ if message == ui.taskbar_created && message != 0 => {
@@ -454,7 +484,7 @@ pub fn handle_message(app: &AppHandle, message: u32, w: WPARAM, l: LPARAM) -> Op
             };
         match key {
             1..=3 => ui.actions.push(ACTIONS[key - 1]),
-            5 => { ui.dismiss(); ui.render(Instant::now()); }
+            5 => { ui.dismiss(); ui.render(Instant::now(), true); }
             _ => {}
         }
         Some(key)
@@ -538,8 +568,14 @@ mod tests {
         let pulse = Pulse { alert, start };
         assert_eq!(pulse.timing(), (250, 2000));
         assert_eq!(pulse.opacity(start, false), Some((0, 0)));
+        assert_eq!(pulse.interval(start, false), FADE_FRAME_MS);
+        assert_eq!(pulse.interval(start, true), WAIT_FRAME_MS);
+        assert!(pulse.opacity(start + Duration::from_millis(62), false).unwrap().1 < 11);
         assert!(pulse.opacity(start + Duration::from_millis(250), false).unwrap().1 > 0);
+        assert_eq!(pulse.opacity(start + Duration::from_millis(375), false),
+            pulse.opacity(start + Duration::from_millis(125), false));
         assert_eq!(pulse.opacity(start + Duration::from_millis(1000), false), Some((0, 0)));
+        assert_eq!(pulse.interval(start + Duration::from_millis(1000), false), WAIT_FRAME_MS);
         assert!(pulse.opacity(start + Duration::from_millis(1000), true).unwrap().1 > 0);
         assert_eq!(pulse.opacity(start + Duration::from_millis(4000), true), None);
     }

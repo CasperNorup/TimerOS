@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cueNames, newDesktopSettings, shortcutNames, type Cue, type CueSettings, type DesktopSettings } from "./desktopSettings";
-import { act, displayTime, minute, phaseName } from "./timer";
+import { act, displayTime, minute, phaseName, type Session } from "./timer";
 import { miniColors, type PaletteColors } from "./appearance";
 import type { useTimer } from "./useTimer";
+import { translator } from "./locale";
 
 export type DesktopCommand = "start" | "move" | "save-move" | "cancel-move" | "dismiss" | "quit";
 type Display = { id: string; name: string; primary: boolean };
@@ -35,6 +36,13 @@ export function formatClock(ms: number, countUp = false): string {
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
 }
 
+export function sessionPhase(session: Session, t: ReturnType<typeof translator>): string {
+  const name = phaseName(session);
+  const phase = session.routine.kind === "sequence" ? name : t(name);
+  const status = session.status === "paused" ? t("Paused") : session.status === "ready" ? t("Ready") : "";
+  return status ? phase + " · " + status : phase;
+}
+
 export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteColors) {
   const timer = useRef(model);
   const activePalette = useRef(palette);
@@ -51,7 +59,8 @@ export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteC
   const send = useCallback(async () => {
     const current = timer.current;
     if (!native || busy.current || !current.view) return;
-    const { session, desktop, transition } = current.view;
+    const { session, desktop, transition, language } = current.view;
+    const t = translator(language);
     busy.current = true;
     try {
       if (seen.current === null) seen.current = current.baselineCue;
@@ -59,7 +68,7 @@ export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteC
         seen.current = transition.id;
         const style = desktop.cues[transition.event];
         staged.current = {
-          ...style, token: "event-" + transition.id, label: cueNames[transition.event], target: desktop.target,
+          ...style, token: "event-" + transition.id, label: t(cueNames[transition.event]), target: desktop.target,
           monitor: desktop.alertMonitor, volume: desktop.sound ? desktop.volume : 0,
         };
       }
@@ -67,12 +76,12 @@ export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteC
       const command = pending === "start" && !session ? null : pending;
       const alert = staged.current;
       const reading = session ? displayTime(session, current.now) : null;
-      const phase = session ? phaseName(session) +
-        (session.status === "paused" ? " · Paused" : session.status === "ready" ? " · Ready" : "") : "Preview";
+      const phase = session ? sessionPhase(session, t) : t("Preview");
       const result = await native.invoke<Report>("present_desktop", {
         frame: {
           mini: { ...desktop.mini, ...miniColors(desktop.mini, activePalette.current) },
           active: Boolean(session), status: session?.status ?? "idle", phase,
+          language,
           clock: reading ? formatClock(reading.countUp ? reading.elapsed : reading.remaining ?? 0, reading.countUp)
             : formatClock(25 * minute),
           rounds: session?.rounds ?? 0,
@@ -105,8 +114,8 @@ export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteC
           }
         });
       }
-    } catch (problem) {
-      setError("Windows desktop controls could not respond: " + String(problem));
+    } catch {
+      setError("Windows desktop controls could not respond.");
     } finally {
       busy.current = false;
     }
@@ -120,7 +129,7 @@ export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteC
     const interval = window.setInterval(() => void send(), 300);
     return () => window.clearInterval(interval);
   }, [loaded, send]);
-  useEffect(() => { if (loaded) void send(); }, [settings, palette, stamp, loaded, send]);
+  useEffect(() => { if (loaded) void send(); }, [settings, palette, stamp, loaded, model.view?.language, send]);
 
   const command = (action: DesktopCommand) => {
     if (!native) return;
@@ -131,11 +140,12 @@ export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteC
 
   function preview(cue: Cue, sound = false) {
     if (!native) return;
-    const desktop = timer.current.view?.desktop;
-    if (!desktop) return;
+    const view = timer.current.view;
+    if (!view) return;
+    const { desktop, language } = view;
     const style = desktop.cues[cue];
     staged.current = {
-      ...style, token: "preview-" + crypto.randomUUID(), label: sound ? "Chime preview" : "Alert preview",
+      ...style, token: "preview-" + crypto.randomUUID(), label: translator(language)(sound ? "Chime preview" : "Alert preview"),
       enabled: !sound, target: desktop.target, monitor: desktop.alertMonitor,
       volume: sound ? desktop.volume : 0,
     };

@@ -14,6 +14,7 @@ export type Shortcut = keyof typeof shortcutNames;
 export type Chime = "none" | "low" | "bright" | "double";
 export type Placement = "left" | "center" | "right" | "free";
 export type AlertStyle = "fade" | "edge" | "static";
+export const miniFonts = ["Segoe UI", "Arial", "Georgia", "Consolas"] as const;
 
 export type MiniSettings = {
   enabled: boolean;
@@ -27,6 +28,13 @@ export type MiniSettings = {
   color: string;
   text: string;
   accent: string;
+  backgroundKind: "solid" | "gradient";
+  backgroundEnd: string;
+  gradientDirection: "horizontal" | "vertical";
+  font: typeof miniFonts[number];
+  clockScale: number;
+  clockWeight: "regular" | "medium" | "bold";
+  roundness: number;
   showTime: boolean;
   showProgress: boolean;
   showPhase: boolean;
@@ -66,6 +74,8 @@ export function newDesktopSettings(): DesktopSettings {
     mini: {
       enabled: true, monitor: "", placement: "right", freeX: 1, freeY: 1, opacity: 90,
       size: 100, inheritTheme: false, color: "#111e35", text: "#ffffff", accent: "#73b1ff",
+      backgroundKind: "solid", backgroundEnd: "#295892", gradientDirection: "horizontal",
+      font: "Segoe UI", clockScale: 100, clockWeight: "medium", roundness: 14,
       showTime: true, showProgress: true, showPhase: false, showRounds: false,
       progressStyle: "bar",
     },
@@ -110,6 +120,13 @@ export function readDesktopSettings(stored: unknown): DesktopSettings {
   mini.color = color(mini.color, defaults.mini.color);
   mini.text = color(mini.text, defaults.mini.text);
   mini.accent = color(mini.accent, defaults.mini.accent);
+  mini.backgroundEnd = color(mini.backgroundEnd, defaults.mini.backgroundEnd);
+  if (mini.backgroundKind !== "gradient") mini.backgroundKind = "solid";
+  if (mini.gradientDirection !== "vertical") mini.gradientDirection = "horizontal";
+  if (!miniFonts.includes(mini.font)) mini.font = defaults.mini.font;
+  if (mini.clockWeight !== "regular" && mini.clockWeight !== "bold") mini.clockWeight = "medium";
+  mini.clockScale = Math.round(range(mini.clockScale, 80, 140, 100));
+  mini.roundness = Math.round(range(mini.roundness, 0, 24, 14));
   if (!mini.showTime && !mini.showProgress && !mini.showPhase && !mini.showRounds) mini.showTime = true;
   if (!["all", "selected", "mini"].includes(result.target)) result.target = "all";
   result.volume = Math.round(range(result.volume, 0, 100, defaults.volume));

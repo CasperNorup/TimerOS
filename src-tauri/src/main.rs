@@ -18,6 +18,7 @@ fn main() {
             desktop::load_workspace,
             desktop::save_workspace,
             desktop::take_signals,
+            desktop::open_feedback,
             surface::present_desktop
         ])
         .on_window_event(|window, event| {

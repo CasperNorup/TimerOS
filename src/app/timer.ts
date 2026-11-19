@@ -1,5 +1,6 @@
 import { newDesktopSettings, readDesktopSettings, type DesktopSettings } from "./desktopSettings.ts";
 import { newAppearance, readAppearance, type Appearance, type DisplayMode } from "./appearance.ts";
+import { historyLimit, readHistory, type StudyHistory } from "./history.ts";
 
 export const minute = 60_000;
 export const maxBlockMinutes = 720;
@@ -39,6 +40,8 @@ export type Session = {
   rounds: number;
   step?: number;
   flowBreak?: number;
+  studySubject?: string;
+  builtInName?: true;
 };
 export type Transition = { id: number; event: "focus-ended" | "break-ended" | "finished" };
 export type Workspace = {
@@ -53,6 +56,9 @@ export type Workspace = {
   checkpoint: number;
   desktop: DesktopSettings;
   appearance: Appearance;
+  history: StudyHistory;
+  language: "en" | "da";
+  compactSidebar: boolean;
 };
 export type TimerAction = "pause" | "resume" | "next" | "skip" | "restart" | "add" | "stop";
 
@@ -84,7 +90,7 @@ export function newWorkspace(legacyMode?: DisplayMode): Workspace {
     version: 1, presets: [], nextPreset: 1, lastPreset: "classic",
     policies: { lock: "pause", sleep: "pause", quit: "pause" },
     session: null, result: null, transition: null, checkpoint: 0, desktop: newDesktopSettings(),
-    appearance: newAppearance(legacyMode),
+    appearance: newAppearance(legacyMode), history: readHistory(null), language: "en", compactSidebar: false,
   };
 }
 
@@ -167,6 +173,8 @@ function decodeSession(session: Session) {
         session.phase !== (blocks[session.step].kind === "focus" ? "focus" : "short")) throw new Error();
   }
   if (session.routine.kind === "flowtime" && session.phase !== "focus" && !isMinutes(session.flowBreak)) throw new Error();
+  if (typeof session.studySubject !== "string" || session.studySubject.length > 60) delete session.studySubject;
+  if (session.builtInName !== true) delete session.builtInName;
 }
 
 export function decodeWorkspace(json: string, legacyMode?: DisplayMode): Workspace {
@@ -194,6 +202,9 @@ export function decodeWorkspace(json: string, legacyMode?: DisplayMode): Workspa
         !["focus-ended", "break-ended", "finished"].includes(transition.event))) throw new Error();
     state.desktop = readDesktopSettings(state.desktop);
     state.appearance = readAppearance(state.appearance, legacyMode);
+    state.history = readHistory(state.history);
+    state.language = state.language === "da" ? "da" : "en";
+    state.compactSidebar = state.compactSidebar === true;
     return state;
   } catch {
     throw new Error("Saved TimerOS data could not be read. The original file is still available.");
@@ -238,7 +249,7 @@ function resetBlock(session: Session, now: number) {
   session.planned = session.remaining = blockDuration(session);
 }
 
-export function startSession(state: Workspace, routine: Routine, presetId: string, now: number): void {
+export function startSession(state: Workspace, routine: Routine, presetId: string, now: number, subject = ""): void {
   if (state.session) throw new Error("Stop the current session before starting another.");
   validateRoutine(routine);
   if (![...builtIns, ...state.presets].some(preset => preset.id === presetId)) {
@@ -248,6 +259,8 @@ export function startSession(state: Workspace, routine: Routine, presetId: strin
     routine: structuredClone(routine), phase: "focus", status: "running",
     started: now, planned: null, remaining: null, elapsed: 0, focusTotal: 0, rounds: 0,
   };
+  if (state.history.enabled) session.studySubject = subject.trim().slice(0, 60);
+  if (builtIns.some(preset => preset.id === presetId && preset.routine.name === routine.name)) session.builtInName = true;
   if (routine.kind === "sequence") {
     session.step = 0;
     if (routine.sequence!.blocks[0].kind === "break") session.phase = "short";
@@ -313,9 +326,14 @@ function consume(session: Session, now: number): void {
   session.started = now;
 }
 
-function finish(state: Workspace, session: Session, reason: "finished" | "stopped"): void {
+function finish(state: Workspace, session: Session, reason: "finished" | "stopped", endedAt: number): void {
   state.result = { name: session.routine.name, focusTime: session.focusTotal, rounds: session.rounds, reason };
   state.session = null;
+  if (state.history.enabled && session.studySubject !== undefined && session.focusTotal > 0) {
+    const entry = { name: session.routine.name, subject: session.studySubject, endedAt, focusTime: session.focusTotal, reason,
+      ...(session.builtInName ? { builtInName: session.builtInName } : {}) };
+    state.history.sessions = [...state.history.sessions, entry].slice(-historyLimit);
+  }
   if (reason === "finished" || state.desktop.alertOnStop) record(state, "finished");
 }
 
@@ -336,7 +354,7 @@ function advance(state: Workspace, session: Session, now: number, completed: boo
   if (completed && phase === "focus") session.rounds++;
   if (routine.kind === "countdown" || routine.kind === "stopwatch" ||
       (routine.goal.kind === "focus" && session.focusTotal >= routine.goal.amount * minute)) {
-    finish(state, session, "finished");
+    finish(state, session, "finished", now);
     return;
   }
   if (routine.kind === "sequence") {
@@ -346,7 +364,7 @@ function advance(state: Workspace, session: Session, now: number, completed: boo
     const goalStopsNow = roundsReached(session) &&
       (repeat || blocks.slice(index).some(block => block.kind === "focus"));
     if ((!hasMore && !repeat) || goalStopsNow) {
-      finish(state, session, "finished");
+      finish(state, session, "finished", now);
       return;
     }
     session.step = index % blocks.length;
@@ -355,7 +373,7 @@ function advance(state: Workspace, session: Session, now: number, completed: boo
     return;
   }
   if (roundsReached(session)) {
-    finish(state, session, "finished");
+    finish(state, session, "finished", now);
     return;
   }
   if (phase !== "focus") {
@@ -376,7 +394,7 @@ export function takeFlowBreak(state: Workspace, minutes: number, now: number): v
   consume(session, now);
   session.rounds++;
   if (roundsReached(session)) {
-    finish(state, session, "finished");
+    finish(state, session, "finished", now);
     return;
   }
   session.flowBreak = minutes;
@@ -442,7 +460,7 @@ export function act(state: Workspace, action: TimerAction, now: number): void {
   if (!session) return;
   if (action === "stop") {
     consume(session, now);
-    finish(state, session, "stopped");
+    finish(state, session, "stopped", now);
   } else if (action === "pause" && session.status === "running") {
     consume(session, now);
     session.status = "paused";

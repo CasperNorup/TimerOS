@@ -19,6 +19,14 @@ pub struct Mini {
     color: String,
     text: String,
     accent: String,
+    background_kind: String,
+    background_end: String,
+    gradient_direction: String,
+    inherit_theme: bool,
+    font: String,
+    clock_scale: u32,
+    clock_weight: String,
+    roundness: u32,
     show_time: bool,
     show_progress: bool,
     show_phase: bool,
@@ -38,6 +46,8 @@ pub struct Frame {
     progress: Option<f64>,
     shortcuts: [String; 5],
     reduced_motion: bool,
+    #[serde(default)]
+    language: String,
     #[serde(default)]
     alert: Option<Alert>,
     #[serde(default)]
