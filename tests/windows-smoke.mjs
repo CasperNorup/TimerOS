@@ -161,9 +161,14 @@ async function verifySurfaces(page, named) {
   assert.equal(await page.getByRole("checkbox", { name: "Play alert sounds" }).isChecked(), false);
   assert.equal(await page.getByRole("combobox", { name: "Alert display" }).inputValue(), "all");
   await page.getByRole("combobox", { name: "Visual style" }).selectOption("static");
-  await page.getByRole("checkbox", { name: "Repeat until dismissed" }).check();
-  await page.getByRole("combobox", { name: "Visual style" }).selectOption("edge");
-  await page.getByRole("combobox", { name: "Visual style" }).selectOption("static");
+  await page.getByRole("checkbox", { name: "Repeat until dismissed" }).click();
+  await page.waitForFunction(() => {
+    const inputs = [...document.querySelectorAll('input[type="checkbox"]')];
+    const repeat = inputs.find(field => field.labels?.[0]?.textContent.includes("Repeat until dismissed"));
+    const styles = [...document.querySelectorAll("select")];
+    const style = styles.find(field => field.labels?.[0]?.textContent.startsWith("Visual style"));
+    return repeat?.checked && style?.value === "static";
+  });
 
   for (const layout of ["maximize", "borderless"]) {
     signal(layout);
@@ -176,6 +181,10 @@ async function verifySurfaces(page, named) {
     assert.equal(alert.bottom, alert.screenBottom);
     assert.ok(alert.opacity < 255);
     assertPassive(await inspectUntil(miniTitle, window => window.visible));
+    if (layout === "maximize") {
+      await delay(4300);
+      assertPassive(await inspectUntil(alertTitle, window => window.visible));
+    }
     signal("hotkey", smokeTitle, 5);
     await inspectUntil(alertTitle, window => !window.visible);
   }
