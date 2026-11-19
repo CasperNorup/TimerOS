@@ -8,7 +8,7 @@
 
 You are the developer, designer, and tester for TimerOS. Build a small study timer that lets me select a routine, start it, and get back to work. When I start a session, minimize the main window and show a small, click-through timer at the bottom of the screen. Tell me when to switch between focus and breaks with a translucent color pulse. Keep sound off by default.
 
-Use [LifeOS](https://github.com/CasperNorup/LifeOS) and [BudgetOS](https://github.com/CasperNorup/BudgetOS) as the visual and technical references. Carry over the rounded shapes, typography, spacing, buttons, focus states, and Settings layout. Keep the TimerOS main screen compact. Give the timer, preset selector, and Start button priority. Offer Timer, Settings, and eventually History through compact navigation. Reopen the app with the last-used preset ready.
+Use [LifeOS](https://github.com/CasperNorup/LifeOS) and [BudgetOS](https://github.com/CasperNorup/BudgetOS) as the visual and technical references. Carry over the rounded shapes, typography, spacing, buttons, focus states, and Settings layout. Keep the TimerOS main screen compact. Give the timer, preset selector, and Start button priority. Use one Settings button on the timer screen. Put History and About in Settings. Reopen the app with the last-used preset ready.
 
 ## 2. Timer modes and presets
 
@@ -77,6 +77,8 @@ Create independent settings for **Focus ended / break is next**, **Break ended /
 
 ### Phase 5 appearance and About scope
 
+These are the appearance changes shipped in 0.5.3. The next batch defines navigation for subsequent builds.
+
 - Give the full desktop interface the same visual structure as LifeOS and BudgetOS. Use a compact, collapsible left sidebar for Timer, History, and Settings. Match the reference apps' page hierarchy, typography, spacing, cards, forms, buttons, dialogs, and focus states. Apply the design across timer setup, active and completed sessions, the preset editor, History, and every Settings section. Keep the large timer and primary session controls easy to reach at the minimum window size. Use the approved transparent TimerOS mark and its existing visible size. [LifeOS appearance guide](https://github.com/CasperNorup/LifeOS/blob/main/docs/USER_GUIDE.md#appearance-and-keyboard-shortcuts) · [BudgetOS design reference](https://github.com/CasperNorup/BudgetOS/blob/main/docs/MASTER_PROMPT.md#lifeos-design-reference).
 - Put an **About v…** button in the sidebar footer and display the running build's version. Open an **About TimerOS** dialog with the transparent logo, app name, version, creator Casper Norup, © 2026 Casper Norup, and **Contact & feedback** with `CasperRNorup@gmail.com`. Let the user open their mail app or copy the address. Include a **Third-party licenses** view with notices bundled locally for the shipped dependencies and assets. Support keyboard navigation, Escape to close, and focus returning to About. [LifeOS About dialog](https://github.com/CasperNorup/LifeOS/blob/main/src/app/AboutLifeOS.tsx) · [BudgetOS About dialog](https://github.com/CasperNorup/BudgetOS/blob/main/src/app/About.tsx).
 - Use one shared, TimerOS-styled color picker across theme palettes, solid and gradient backgrounds, mini timer colors, and alert colors. Open it from a swatch beside the editable hex value. Provide a saturation and brightness area, hue slider, color preview, and editable RGB and hex values. Offer the eyedropper where the Windows WebView supports it. Show the draft color live, save it through **Apply**, and restore the previous color through **Cancel** or Escape. Include keyboard controls, labeled numeric fields, and clear invalid-input feedback. [LifeOS theme editor](https://github.com/CasperNorup/LifeOS/blob/main/src/app/ThemeSettings.tsx).
@@ -94,6 +96,12 @@ Create independent settings for **Focus ended / break is next**, **Break ended /
 - Sample the Windows overlay opacity during a fade. Check that changes are eased, the pulse cadence is bounded, and reduced motion uses a still tint. Check event colors, fullscreen overlay coverage, and repeat dismissal.
 - Configure a native mini timer gradient and font, restart the app, and verify the stored choices and click-through behavior.
 - Run the timer, mini timer, tray, alerts, keyboard shortcuts, and recovery regressions. Verify the in-place upgrade preserves saved presets, appearance preferences, and placement.
+
+### Next batch · Compact main window
+
+- Remove the sidebar and its collapse control. Restore a timer-first, single-column main window with one **Settings** button.
+- Open Settings in the same window and provide a clear way back to the timer. Make **History** and **About TimerOS** accessible from Settings.
+- Verify the timer screen at the minimum window size and with larger text in English and Danish. Open Settings during a running session and return to the same session. Verify an upgrade from 0.5.3 with the existing settings and history.
 
 ### End-to-end checks
 
