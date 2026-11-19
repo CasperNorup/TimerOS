@@ -131,6 +131,8 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await page.waitForFunction(() => Array.from(document.querySelectorAll('select'))
     .some(select => select.labels?.[0]?.textContent.includes("When the PC sleeps") && !select.disabled));
   await named("Timer").click();
+  await verifyAdditionalModes(page, named, current);
+  await page.getByRole("combobox", { name: "Preset", exact: true }).selectOption("classic");
   await page.getByText("Customize session or preset", { exact: true }).click();
   await page.getByRole("textbox", { name: "Preset name" }).fill("Review");
   await page.getByRole("combobox", { name: "Timer mode" }).selectOption("countdown");
@@ -156,6 +158,82 @@ async function verifyFirstLaunch(page, heading, named, current) {
   console.log("Verified Bloom, reduced motion, preferences, saved presets, and native Windows lock and sleep message handling.");
   await named("Settings").click();
   await named("Quit TimerOS").evaluate(button => button.click());
+}
+
+async function verifyAdditionalModes(page, named, current) {
+  const preset = page.getByRole("combobox", { name: "Preset", exact: true });
+  const elapsed = current.locator('[aria-label="Time elapsed"]');
+  const remaining = current.locator('[aria-label="Time remaining"]');
+
+  async function start() {
+    await named("Start").click();
+    await current.waitFor();
+    await inspectUntil(smokeTitle, window => window.minimized);
+    assertPassive(await inspectUntil(miniTitle, window => window.visible));
+    signal("taskbar");
+    await inspectUntil(smokeTitle, window => window.visible && !window.minimized);
+  }
+
+  async function expectAlert(label) {
+    await page.locator(".alert-status").getByText(label, { exact: true }).waitFor();
+    assertPassive(await inspectUntil(alertTitle, window => window.visible && window.opacity > 0));
+    await named("Dismiss alert").click();
+    await named("Dismiss alert").waitFor({ state: "hidden" });
+  }
+
+  await preset.selectOption("stopwatch");
+  await start();
+  await elapsed.waitFor();
+  await page.waitForFunction(() => document.querySelector('[aria-label="Time elapsed"]')?.textContent !== "0:00");
+  assert.equal(await current.locator("progress").count(), 0);
+  await named("Pause").click();
+  await named("Resume").click();
+  await named("Stop").click();
+  await page.getByText(/^Session stopped/).waitFor();
+
+  await preset.selectOption("sequence");
+  await page.getByText("Customize session or preset", { exact: true }).click();
+  const firstBlock = page.getByRole("textbox", { name: "Block 1 name" });
+  await firstBlock.fill("Read notes");
+  await named("Move block 2 up").click();
+  assert.equal(await firstBlock.inputValue(), "Stretch");
+  await named("Move block 1 down").click();
+  assert.equal(await firstBlock.inputValue(), "Read notes");
+  await page.getByRole("checkbox", { name: "Repeat the sequence" }).check();
+  await page.getByRole("textbox", { name: "Preset name" }).fill("Exam review");
+  await named("Save as new preset").click();
+  await page.waitForFunction(() => document.querySelector("select")?.selectedOptions[0]?.text === "Exam review");
+  await start();
+  await current.getByText("Read notes", { exact: true }).waitFor();
+  await named("Skip").click();
+  await current.getByText("Stretch", { exact: true }).waitFor();
+  await expectAlert("Focus ended");
+  await named("Skip").click();
+  await current.getByText("Practice", { exact: true }).waitFor();
+  await expectAlert("Break ended");
+  await named("Skip").click();
+  await current.getByText("Read notes", { exact: true }).waitFor();
+  await expectAlert("Focus ended");
+  await named("Stop").click();
+  await page.getByText(/^Session stopped/).waitFor();
+
+  await preset.selectOption("flowtime");
+  await start();
+  await elapsed.waitFor();
+  await named("Take a break").click();
+  const duration = page.getByRole("spinbutton", { name: "Break duration (min)" });
+  assert.equal(await duration.inputValue(), "5");
+  await duration.fill("2");
+  await named("Start break").click();
+  await remaining.waitFor();
+  assert.match(await remaining.textContent(), /^(?:2:00|1:[0-5]\d)$/);
+  await expectAlert("Focus ended");
+  await named("Skip").click();
+  await elapsed.waitFor();
+  await expectAlert("Break ended");
+  await named("Stop").click();
+  await page.getByText(/^Session stopped/).waitFor();
+  console.log("Verified Stopwatch, a saved repeating sequence, and a Flowtime break override with Windows mini timer and alerts.");
 }
 
 async function verifySurfaces(page, named) {

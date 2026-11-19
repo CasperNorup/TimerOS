@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cueNames, newDesktopSettings, shortcutNames, type Cue, type CueSettings, type DesktopSettings } from "./desktopSettings";
-import { act, displayTime, minute, type Session } from "./timer";
+import { act, displayTime, minute, phaseName } from "./timer";
 import type { useTimer } from "./useTimer";
 
 export type DesktopCommand = "start" | "move" | "save-move" | "cancel-move" | "dismiss" | "quit";
@@ -24,22 +24,14 @@ const native = (window as Window & {
   __TAURI__?: { core: { invoke<T>(name: string, args: object): Promise<T> } };
 }).__TAURI__?.core;
 
-const phases = { focus: "Focus", short: "Short break", long: "Long break" };
 const empty: Report = {
   actions: [], displays: [], shortcutErrors: [], moving: false, position: null, alertActive: false, message: "",
 };
 
-export function formatRemaining(ms: number): string {
-  const seconds = Math.ceil(Math.max(0, ms) / 1000);
+export function formatClock(ms: number, countUp = false): string {
+  const precise = Math.max(0, ms) / 1000;
+  const seconds = countUp ? Math.floor(precise) : Math.ceil(precise);
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
-}
-
-export function progressOf(session: Session, remaining: number): number {
-  const goal = session.routine.goal;
-  const target = session.routine.kind === "intervals" && goal.kind === "focus" && session.phase === "focus"
-    ? Math.max(0, goal.amount * minute - session.focusTotal) : session.remaining;
-  const effective = session.planned - session.remaining + Math.min(session.remaining, target);
-  return effective ? Math.max(0, Math.min(1, 1 - remaining / effective)) : 1;
 }
 
 export function useDesktop(model: ReturnType<typeof useTimer>) {
@@ -71,14 +63,16 @@ export function useDesktop(model: ReturnType<typeof useTimer>) {
       const pending = commands.current[0] ?? null;
       const command = pending === "start" && !session ? null : pending;
       const alert = staged.current;
-      const remaining = session ? displayTime(session, current.now).remaining : 25 * minute;
-      const phase = session ? phases[session.phase] +
+      const reading = session ? displayTime(session, current.now) : null;
+      const phase = session ? phaseName(session) +
         (session.status === "paused" ? " · Paused" : session.status === "ready" ? " · Ready" : "") : "Preview";
       const result = await native.invoke<Report>("present_desktop", {
         frame: {
           mini: desktop.mini, active: Boolean(session), status: session?.status ?? "idle", phase,
-          clock: formatRemaining(remaining), rounds: session?.rounds ?? 0,
-          progress: session ? progressOf(session, remaining) : 0,
+          clock: reading ? formatClock(reading.countUp ? reading.elapsed : reading.remaining ?? 0, reading.countUp)
+            : formatClock(25 * minute),
+          rounds: session?.rounds ?? 0,
+          progress: reading ? reading.progress : 0,
           shortcuts: (Object.keys(shortcutNames) as (keyof typeof shortcutNames)[])
             .map(key => desktop.shortcuts[key]),
           reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,

@@ -350,10 +350,13 @@ impl DesktopUi {
         if self.mini.is_none() { self.mini = Panel::new("TimerOS Mini Timer"); }
         let Some(mini) = self.mini.as_mut() else { return };
         let bg = rgb(&prefs.color, 0x00351e11);
+        let show_clock = prefs.show_time
+            || (frame.active && frame.progress.is_none() && !prefs.show_phase && !prefs.show_rounds);
         mini.draw(Paint {
             color: bg, text: rgb(&prefs.text, 0x00ffffff), accent: rgb(&prefs.accent, 0x00ffb173),
-            clock: if prefs.show_time && (frame.active || self.moving) { frame.clock.clone() } else { String::new() },
-            detail: detail.join(" · "), progress: prefs.show_progress.then_some(frame.progress.clamp(0.0, 1.0)),
+            clock: if show_clock && (frame.active || self.moving) { frame.clock.clone() } else { String::new() },
+            detail: detail.join(" · "),
+            progress: if prefs.show_progress { frame.progress.map(|p| p.clamp(0.0, 1.0)) } else { None },
             thin: prefs.progress_style == "line", movable: self.moving, scale,
             cue: tint.map(|(color, alpha)| mix(bg, color, alpha)),
         });

@@ -2,11 +2,13 @@
 
 TimerOS is a Windows study timer designed to work offline. Choose a focus routine, start it, and keep working with a small, click-through timer at the bottom of the screen. Customizable screen alerts signal focus and break transitions. Sound is off by default.
 
-The planned timer modes include Pomodoro, fixed focus and break intervals, a countdown, a stopwatch, custom sequences, and Flowtime.
+## Phase 3 Windows preview
 
-## Phase 2 Windows preview
+Version 0.3.2 supports Pomodoro, fixed focus and break intervals, a single countdown, Stopwatch, custom sequences, and Flowtime. Edit the current setup or save it as a named preset. Automatic and manual transitions are available for timed focus and break blocks.
 
-Version 0.2.3 supports Pomodoro, fixed focus and break intervals, and a single countdown. Edit the active setup once or save it as a named preset. Choose automatic or manual transitions, then end after a round target, a focus-time goal, or by pressing Stop.
+- **Stopwatch** counts up from zero. Set a focus-time target to finish automatically and show progress, or press Stop whenever you are done.
+- **Review Sequence** is a starting point for a custom sequence. Name, reorder, add, or remove timed focus and break blocks. Run the sequence once, repeat it, or set a round or focus-time goal.
+- **Flowtime** counts up until you select **Take a break**. TimerOS suggests a 5-, 8-, or 10-minute break after up to 25, up to 50, or more than 50 minutes of active focus. Change these defaults in the preset or enter a different duration when you take a break. You can configure the next focus block to start automatically or wait for you.
 
 Starting a session minimizes TimerOS and opens the click-through mini timer. Restore the main window from the taskbar or tray. Closing the main window during a session leaves the timer running in the tray. Use **Quit TimerOS** from the tray or Settings to exit.
 
