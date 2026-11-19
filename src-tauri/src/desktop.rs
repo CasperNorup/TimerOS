@@ -111,6 +111,20 @@ pub fn save_workspace(state: State<'_, Desktop>, contents: String) -> Result<(),
 }
 
 #[tauri::command]
+pub fn open_feedback() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+        let open: Vec<u16> = "open\0".encode_utf16().collect();
+        let email: Vec<u16> = "mailto:CasperRNorup@gmail.com\0".encode_utf16().collect();
+        let result = unsafe { ShellExecuteW(std::ptr::null_mut(), open.as_ptr(), email.as_ptr(),
+            std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
+        if result as isize > 32 { return Ok(()); }
+    }
+    Err("The mail app is unavailable.".into())
+}
+
+#[tauri::command]
 pub fn take_signals(state: State<'_, Desktop>) -> Result<Lifecycle, String> {
     let mut signals = state.signals.lock().map_err(|error| error.to_string())?;
     Ok(Lifecycle {

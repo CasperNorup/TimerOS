@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import { verifyAppearance, verifySavedAppearance } from "./appearance-smoke.mjs";
+import { verifyPhaseFive, verifySavedPhaseFive } from "./phase5-smoke.mjs";
 
 const endpoint = "http://127.0.0.1:" + process.env.TIMEROS_WEBVIEW_PORT;
 const scenario = process.argv[2] || "initial";
@@ -62,6 +63,7 @@ try {
     await named("Pause").waitFor();
     await named("Settings").click();
     await verifySavedAppearance(page);
+    await verifySavedPhaseFive(page);
     await page.getByText("Mini timer", { exact: true }).click();
     assert.equal(await page.getByRole("combobox", { name: "Placement" }).inputValue(), "free");
     await page.getByText("Alerts and sound", { exact: true }).click();
@@ -83,7 +85,7 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await page.locator(".startup-animation.is-playing svg").waitFor({ timeout: 8_000 });
   await heading.waitFor({ timeout: 12_000 });
   assert.equal(await page.getByText("25:00", { exact: true }).count(), 1);
-  assert.match(await page.locator("footer").innerText(), /^TimerOS \d+\.\d+\.\d+$/);
+  assert.match(await named("About TimerOS").getAttribute("title"), /^About TimerOS v\d+\.\d+\.\d+$/);
   const headerIcon = await page.locator(".brand img").evaluate(async image => {
     await image.decode();
     const canvas = document.createElement("canvas");
@@ -129,6 +131,11 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await page.getByRole("button", { name: "Settings" }).click();
   assert.equal(await mode.inputValue(), "Dark");
   await verifyAppearance(page, heading, named);
+  await verifyPhaseFive(page, async () => {
+    await inspectUntil(smokeTitle, window => window.minimized);
+    signal("taskbar");
+    await inspectUntil(smokeTitle, window => window.visible && !window.minimized);
+  }, { native: true });
 
   await page.getByRole("combobox", { name: "When the PC sleeps" }).selectOption("continue");
   await page.waitForFunction(() => Array.from(document.querySelectorAll('select'))
@@ -273,8 +280,18 @@ async function verifySurfaces(page, named) {
   await page.getByText("Alerts and sound", { exact: true }).click();
   assert.equal(await page.getByRole("checkbox", { name: "Play alert sounds" }).isChecked(), false);
   assert.equal(await page.getByRole("combobox", { name: "Alert display" }).inputValue(), "all");
-  await page.getByRole("combobox", { name: "Visual style" }).selectOption("static");
   await page.getByRole("checkbox", { name: "Repeat until dismissed" }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('input[type="checkbox"]')]
+    .find(field => field.labels?.[0]?.textContent.includes("Repeat until dismissed"))?.checked);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await named("Preview visual").click();
+  const samples = JSON.parse(signal("sample", alertTitle));
+  assert.ok(samples.levels >= 18, "Expected a smooth fade with multiple opacity levels: " + JSON.stringify(samples));
+  await named("Stop preview / dismiss").click();
+  await inspectUntil(alertTitle, window => !window.visible);
+  console.log("Native fade used " + samples.levels + " distinct nonzero opacity levels in " + samples.elapsedMs + " ms.");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("combobox", { name: "Visual style" }).selectOption("static");
   await page.waitForFunction(() => {
     const inputs = [...document.querySelectorAll('input[type="checkbox"]')];
     const repeat = inputs.find(field => field.labels?.[0]?.textContent.includes("Repeat until dismissed"));

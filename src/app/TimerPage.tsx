@@ -1,15 +1,17 @@
+import { useLocale } from "./locale";
 import { useState } from "react";
-import { act, builtIns, defaultFlowBreaks, deletePreset, displayTime, maxBlockMinutes, minute, phaseName,
+import { act, builtIns, defaultFlowBreaks, deletePreset, displayTime, maxBlockMinutes, minute,
   sampleSequence, savePreset, startSession, suggestFlowBreak, takeFlowBreak,
   type Goal, type Routine, type Sequence, type SequenceBlock, type Session, type TimerAction, type TimerMode,
   type Workspace } from "./timer";
 import type { useTimer } from "./useTimer";
-import { formatClock as clock } from "./useDesktop";
+import { formatClock as clock, sessionPhase } from "./useDesktop";
 
 type Model = ReturnType<typeof useTimer>;
 type BreakChoice = { suggested: number; minutes: number; resumeOnCancel: boolean };
 
 function SessionCard({ session, model }: { session: Session; model: Model }) {
+  const { t } = useLocale();
   const [choice, setChoice] = useState<BreakChoice | null>(null);
   const reading = displayTime(session, model.now);
   const primary: TimerAction = session.status === "running" ? "pause" : session.status === "ready" ? "next" : "resume";
@@ -35,21 +37,21 @@ function SessionCard({ session, model }: { session: Session; model: Model }) {
   }
 
   return (
-    <section className="panel timer" aria-label="Current session">
-      <h2>{session.routine.name}</h2>
-      <p className="phase">
-        {phaseName(session)}{session.status === "paused" ? " · Paused" : session.status === "ready" ? " · Ready" : ""}
-      </p>
-      <p className="time" aria-label={reading.countUp ? "Time elapsed" : "Time remaining"}>
+    <section className="panel timer" aria-label={t("Current session")}>
+      <h2>{session.builtInName ? t(session.routine.name) : session.routine.name}</h2>
+      <p className="phase">{sessionPhase(session, t)}</p>
+      <p className="time" aria-label={t(reading.countUp ? "Time elapsed" : "Time remaining")}>
         {clock(reading.countUp ? reading.elapsed : reading.remaining ?? 0, reading.countUp)}
       </p>
       {reading.progress !== null && <progress max={1} value={reading.progress}
-        aria-label={reading.countUp ? "Focus goal progress" : "Interval progress"} />}
+        aria-label={t(reading.countUp ? "Focus goal progress" : "Interval progress")} />}
       {(session.routine.kind !== "countdown" && session.routine.kind !== "stopwatch" || focusGoal) && (
         <p className="intervals">
-          {session.routine.kind === "sequence" && "Block " + ((session.step ?? 0) + 1) + " of " + session.routine.sequence!.blocks.length + " · "}
-          {session.routine.kind !== "stopwatch" && session.rounds + (session.rounds === 1 ? " round completed" : " rounds completed")}
-          {focusGoal && (session.routine.kind !== "stopwatch" ? " · " : "") + clock(reading.focusTotal, true) + " focus"}
+          {session.routine.kind === "sequence" && t("Block {number} of {total}", {
+            number: (session.step ?? 0) + 1, total: session.routine.sequence!.blocks.length,
+          }) + " · "}
+          {session.routine.kind !== "stopwatch" && t(session.rounds === 1 ? "{count} round completed" : "{count} rounds completed", { count: session.rounds })}
+          {focusGoal && (session.routine.kind !== "stopwatch" ? " · " : "") + t("{time} focus", { time: clock(reading.focusTotal, true) })}
         </p>
       )}
       {editingBreak ? (
@@ -60,36 +62,36 @@ function SessionCard({ session, model }: { session: Session; model: Model }) {
           });
         }}>
           {session.routine.goal.kind === "rounds" && session.rounds + 1 >= session.routine.goal.amount ? (
-            <p className="intervals">This focus block completes your round goal.</p>
+            <p className="intervals">{t("This focus block completes your round goal.")}</p>
           ) : (
             <>
-              <p className="intervals">Suggested break · {editingBreak.suggested} min</p>
-              <Minutes label="Break duration (min)" value={editingBreak.minutes}
+              <p className="intervals">{t("Suggested break · {minutes} min", { minutes: editingBreak.suggested })}</p>
+              <Minutes label={t("Break duration (min)")} value={editingBreak.minutes}
                 set={minutes => setChoice({ ...editingBreak, minutes })} />
             </>
           )}
           <div className="controls">
             <button type="submit" className="primary" disabled={model.busy}>
-              {session.routine.goal.kind === "rounds" && session.rounds + 1 >= session.routine.goal.amount
-                ? "Finish session" : "Start break"}
+              {t(session.routine.goal.kind === "rounds" && session.rounds + 1 >= session.routine.goal.amount
+                ? "Finish session" : "Start break")}
             </button>
             <button type="button" disabled={model.busy} onClick={() => {
               if (editingBreak.resumeOnCancel) {
                 void model.update((state, time) => act(state, "resume", time)).then(ok => { if (ok) setChoice(null); });
               } else setChoice(null);
-            }}>Cancel</button>
-            <button type="button" disabled={model.busy} onClick={() => send("stop")}>Stop</button>
+            }}>{t("Cancel")}</button>
+            <button type="button" disabled={model.busy} onClick={() => send("stop")}>{t("Stop")}</button>
           </div>
         </form>
       ) : (
         <div className="controls">
           <button className={flowFocus ? undefined : "primary"} type="button" disabled={model.busy}
-            onClick={() => send(primary)}>{mainLabel}</button>
-          {flowFocus && <button className="primary" type="button" disabled={model.busy} onClick={offerBreak}>Take a break</button>}
-          {session.planned !== null && <button type="button" disabled={model.busy} onClick={() => send("add")}>+5 min</button>}
-          {canSkip && <button type="button" disabled={model.busy} onClick={() => send("skip")}>Skip</button>}
-          <button type="button" disabled={model.busy} onClick={() => send("restart")}>Restart</button>
-          <button type="button" disabled={model.busy} onClick={() => send("stop")}>Stop</button>
+            onClick={() => send(primary)}>{t(mainLabel)}</button>
+          {flowFocus && <button className="primary" type="button" disabled={model.busy} onClick={offerBreak}>{t("Take a break")}</button>}
+          {session.planned !== null && <button type="button" disabled={model.busy} onClick={() => send("add")}>{t("+5 min")}</button>}
+          {canSkip && <button type="button" disabled={model.busy} onClick={() => send("skip")}>{t("Skip")}</button>}
+          <button type="button" disabled={model.busy} onClick={() => send("restart")}>{t("Restart")}</button>
+          <button type="button" disabled={model.busy} onClick={() => send("stop")}>{t("Stop")}</button>
         </div>
       )}
     </section>
@@ -107,6 +109,7 @@ function Minutes({ label, value, min = 1, max = maxBlockMinutes, set }: {
 }
 
 function SequenceEditor({ sequence, update }: { sequence: Sequence; update: (sequence: Sequence) => void }) {
+  const { t } = useLocale();
   const { blocks } = sequence;
 
   function change(index: number, edits: Partial<SequenceBlock>) {
@@ -122,54 +125,56 @@ function SequenceEditor({ sequence, update }: { sequence: Sequence; update: (seq
 
   function add(kind: SequenceBlock["kind"]) {
     update({ ...sequence, blocks: [...blocks, {
-      name: kind === "focus" ? "Focus" : "Break", kind, minutes: kind === "focus" ? 25 : 5,
+      name: t(kind === "focus" ? "Focus" : "Break"), kind, minutes: kind === "focus" ? 25 : 5,
     }] });
   }
 
   return <>
     <fieldset className="sequence-editor">
-      <legend>Sequence blocks</legend>
+      <legend>{t("Sequence blocks")}</legend>
       <ol className="sequence-blocks">
         {blocks.map((block, index) => (
           <li key={index}>
             <label className="field">
-              <span>Block {index + 1} name</span>
+              <span>{t("Block {number} name", { number: index + 1 })}</span>
               <input value={block.name} required maxLength={60} onChange={event => change(index, { name: event.currentTarget.value })} />
             </label>
             <label className="field">
-              <span>Block {index + 1} type</span>
+              <span>{t("Block {number} type", { number: index + 1 })}</span>
               <select value={block.kind} onChange={event => change(index, { kind: event.currentTarget.value as SequenceBlock["kind"] })}>
-                <option value="focus">Focus</option><option value="break">Break</option>
+                <option value="focus">{t("Focus")}</option><option value="break">{t("Break")}</option>
               </select>
             </label>
-            <Minutes label={"Block " + (index + 1) + " duration (min)"} value={block.minutes}
+            <Minutes label={t("Block {number} duration (min)", { number: index + 1 })} value={block.minutes}
               set={minutes => change(index, { minutes })} />
             <div className="controls">
-              <button type="button" aria-label={"Move block " + (index + 1) + " up"} disabled={index === 0}
-                onClick={() => move(index, -1)}>Move up</button>
-              <button type="button" aria-label={"Move block " + (index + 1) + " down"} disabled={index === blocks.length - 1}
-                onClick={() => move(index, 1)}>Move down</button>
-              <button type="button" aria-label={"Remove block " + (index + 1)} disabled={blocks.length === 1}
-                onClick={() => update({ ...sequence, blocks: blocks.filter((_, i) => i !== index) })}>Remove</button>
+              <button type="button" aria-label={t("Move block {number} up", { number: index + 1 })} disabled={index === 0}
+                onClick={() => move(index, -1)}>{t("Move up")}</button>
+              <button type="button" aria-label={t("Move block {number} down", { number: index + 1 })} disabled={index === blocks.length - 1}
+                onClick={() => move(index, 1)}>{t("Move down")}</button>
+              <button type="button" aria-label={t("Remove block {number}", { number: index + 1 })} disabled={blocks.length === 1}
+                onClick={() => update({ ...sequence, blocks: blocks.filter((_, i) => i !== index) })}>{t("Remove")}</button>
             </div>
           </li>
         ))}
       </ol>
       <div className="controls">
-        <button type="button" onClick={() => add("focus")}>Add focus block</button>
-        <button type="button" onClick={() => add("break")}>Add break block</button>
+        <button type="button" onClick={() => add("focus")}>{t("Add focus block")}</button>
+        <button type="button" onClick={() => add("break")}>{t("Add break block")}</button>
       </div>
     </fieldset>
     <label className="check"><input type="checkbox" checked={sequence.repeat}
-      onChange={event => update({ ...sequence, repeat: event.currentTarget.checked })} /> Repeat the sequence</label>
+      onChange={event => update({ ...sequence, repeat: event.currentTarget.checked })} />{t("Repeat the sequence")}</label>
   </>;
 }
 
 function PresetSetup({ view, model, onStart }: { view: Workspace; model: Model; onStart: () => void }) {
+  const { t } = useLocale();
   const presets = [...builtIns, ...view.presets];
   const [selected, setSelected] = useState(view.lastPreset);
   const [routine, setRoutine] = useState(() => structuredClone(presets.find(p => p.id === view.lastPreset)!.routine));
   const [deleting, confirmDelete] = useState(false);
+  const [subject, setSubject] = useState("");
   const own = view.presets.some(preset => preset.id === selected);
   const { kind } = routine;
   const sequence = routine.sequence ?? sampleSequence;
@@ -202,7 +207,7 @@ function PresetSetup({ view, model, onStart }: { view: Workspace; model: Model; 
   }
 
   function store(update: boolean, copy = false) {
-    const saved = copy ? { ...routine, name: routine.name.trim().slice(0, 55) + " copy" } : routine;
+    const saved = copy ? { ...routine, name: t("{name} copy", { name: routine.name.trim().slice(0, 50) }) } : routine;
     let targetId = selected;
     void model.update(state => {
       targetId = savePreset(state, saved, update ? selected : undefined).id;
@@ -228,110 +233,112 @@ function PresetSetup({ view, model, onStart }: { view: Workspace; model: Model; 
   return (
     <form className="timer-setup" onSubmit={event => {
       event.preventDefault();
-      void model.update((state, time) => startSession(state, routine, selected, time)).then(ok => { if (ok) onStart(); });
+      void model.update((state, time) => startSession(state, routine, selected, time, subject)).then(ok => { if (ok) onStart(); });
     }}>
       {view.result && (
         <p className="result" role="status">
-          {view.result.reason === "finished" ? "Session complete" : "Session stopped"} · {clock(view.result.focusTime)} focus
-        </p>
+          {t(view.result.reason === "finished" ? "Session complete" : "Session stopped")} · {t("{time} focus", { time: clock(view.result.focusTime) })}</p>
       )}
-      <section className="panel timer" aria-label="Timer setup">
+      <section className="panel timer" aria-label={t("Timer setup")}>
         <label className="field">
-          <span>Preset</span>
+          <span>{t("Preset")}</span>
           <select value={selected} onChange={event => choose(event.currentTarget.value)}>
-            <optgroup label="Built-in presets">
-              {builtIns.map(p => <option key={p.id} value={p.id}>{p.routine.name}</option>)}
+            <optgroup label={t("Built-in presets")}>
+              {builtIns.map(p => <option key={p.id} value={p.id}>{t(p.routine.name)}</option>)}
             </optgroup>
-            {view.presets.length > 0 && <optgroup label="My presets">
+            {view.presets.length > 0 && <optgroup label={t("My presets")}>
               {view.presets.map(p => <option key={p.id} value={p.id}>{p.routine.name}</option>)}
             </optgroup>}
           </select>
         </label>
-        <p className="time" aria-label={initial === 0 ? "Starting elapsed time" : "Starting duration"}>
+        <p className="time" aria-label={t(initial === 0 ? "Starting elapsed time" : "Starting duration")}>
           {Number.isFinite(initial) && initial >= 0 ? clock(initial * minute) : "–:––"}
         </p>
-        {kind === "intervals" && <p className="intervals">{routine.focus} min focus · {routine.short} min break</p>}
-        {kind === "sequence" && <p className="intervals">{firstBlock?.name || "First block"} · {sequence.blocks.length} blocks · {sequenceOnce ? "One pass" : "Repeat"}</p>}
-        {kind === "stopwatch" && <p className="intervals">{routine.goal.kind === "focus" ? routine.goal.amount + " min focus goal" : "Count up"}</p>}
-        {kind === "flowtime" && <p className="intervals">Count up and choose when to take a break</p>}
+        {kind === "intervals" && <p className="intervals">{t("{focus} min focus · {rest} min break", { focus: routine.focus, rest: routine.short })}</p>}
+        {kind === "sequence" && <p className="intervals">{firstBlock?.name || t("First block")} · {t("{count} blocks", { count: sequence.blocks.length })} · {t(sequenceOnce ? "One pass" : "Repeat")}</p>}
+        {kind === "stopwatch" && <p className="intervals">{routine.goal.kind === "focus"
+          ? t("{minutes} min focus goal", { minutes: routine.goal.amount }) : t("Count up")}</p>}
+        {kind === "flowtime" && <p className="intervals">{t("Count up and choose when to take a break")}</p>}
         {kind === "countdown" && (
-          <div className="controls" aria-label="Quick countdown durations">
+          <div className="controls" aria-label={t("Quick countdown durations")}>
             {[5, 15, 25, 45].map(value => (
               <button key={value} type="button" aria-pressed={value === routine.focus} onClick={() => change("focus", value)}>
-                {value} min
-              </button>
+                {t("{minutes} min", { minutes: value })}</button>
             ))}
           </div>
         )}
+        {view.history.enabled && <label className="field subject-field"><span>{t("Study subject (optional)")}</span>
+          <input type="text" value={subject} maxLength={60} onChange={event => setSubject(event.currentTarget.value)} />
+        </label>}
         <div className="controls">
-          <button className="primary" type="submit" disabled={model.busy}>Start</button>
+          <button className="primary" type="submit" disabled={model.busy}>{t("Start")}</button>
         </div>
       </section>
       <details className="panel edit">
-        <summary>Customize session or preset</summary>
+        <summary>{t("Customize session or preset")}</summary>
         <div className="edit-fields">
           <label className="field">
-            <span>Preset name</span>
+            <span>{t("Preset name")}</span>
             <input value={routine.name} maxLength={60} required onChange={event => change("name", event.currentTarget.value)} />
           </label>
           <label className="field">
-            <span>Timer mode</span>
+            <span>{t("Timer mode")}</span>
             <select value={kind} onChange={event => changeMode(event.currentTarget.value as TimerMode)}>
-              <option value="intervals">Focus and break intervals</option>
-              <option value="countdown">Single countdown</option>
-              <option value="stopwatch">Stopwatch</option>
-              <option value="sequence">Custom sequence</option>
-              <option value="flowtime">Flowtime</option>
+              <option value="intervals">{t("Focus and break intervals")}</option>
+              <option value="countdown">{t("Single countdown")}</option>
+              <option value="stopwatch">{t("Stopwatch")}</option>
+              <option value="sequence">{t("Custom sequence")}</option>
+              <option value="flowtime">{t("Flowtime")}</option>
             </select>
           </label>
-          {timed && <Minutes label="Focus (min)" value={routine.focus} set={value => change("focus", value)} />}
+          {timed && <Minutes label={t("Focus (min)")} value={routine.focus} set={value => change("focus", value)} />}
           {kind === "intervals" && <>
-            <Minutes label="Short break (min)" value={routine.short} set={value => change("short", value)} />
-            <Minutes label="Long break every N rounds" min={0} max={99} value={routine.longEvery} set={value => change("longEvery", value)} />
-            {routine.longEvery !== 0 && <Minutes label="Long break (min)" value={routine.long} set={value => change("long", value)} />}
+            <Minutes label={t("Short break (min)")} value={routine.short} set={value => change("short", value)} />
+            <Minutes label={t("Long break every N rounds")} min={0} max={99} value={routine.longEvery} set={value => change("longEvery", value)} />
+            {routine.longEvery !== 0 && <Minutes label={t("Long break (min)")} value={routine.long} set={value => change("long", value)} />}
           </>}
           {kind === "sequence" && <SequenceEditor sequence={sequence} update={value => change("sequence", value)} />}
           {kind === "flowtime" && (
             <fieldset className="flow-suggestions">
-              <legend>Suggested breaks</legend>
-              <Minutes label="Up to 25 min of focus" value={flow.upTo25} set={upTo25 => change("flow", { ...flow, upTo25 })} />
-              <Minutes label="Over 25 through 50 min" value={flow.upTo50} set={upTo50 => change("flow", { ...flow, upTo50 })} />
-              <Minutes label="Over 50 min of focus" value={flow.over50} set={over50 => change("flow", { ...flow, over50 })} />
+              <legend>{t("Suggested breaks")}</legend>
+              <Minutes label={t("Up to 25 min of focus")} value={flow.upTo25} set={upTo25 => change("flow", { ...flow, upTo25 })} />
+              <Minutes label={t("Over 25 through 50 min")} value={flow.upTo50} set={upTo50 => change("flow", { ...flow, upTo50 })} />
+              <Minutes label={t("Over 50 min of focus")} value={flow.over50} set={over50 => change("flow", { ...flow, over50 })} />
             </fieldset>
           )}
           {kind !== "countdown" && <>
             <label className="field">
-              <span>Session ends</span>
+              <span>{t("Session ends")}</span>
               <select value={routine.goal.kind} onChange={event => changeGoal(event.currentTarget.value as Goal["kind"])}>
-                <option value="open">{sequenceOnce ? "At the end of the sequence" : "When I press Stop"}</option>
-                {kind !== "stopwatch" && <option value="rounds">After a number of rounds</option>}
-                <option value="focus">At a focus-time target</option>
+                <option value="open">{t(sequenceOnce ? "At the end of the sequence" : "When I press Stop")}</option>
+                {kind !== "stopwatch" && <option value="rounds">{t("After a number of rounds")}</option>}
+                <option value="focus">{t("At a focus-time target")}</option>
               </select>
             </label>
-            {routine.goal.kind === "rounds" && <Minutes label="Focus rounds" value={routine.goal.amount} max={999}
+            {routine.goal.kind === "rounds" && <Minutes label={t("Focus rounds")} value={routine.goal.amount} max={999}
               set={amount => change("goal", { kind: "rounds", amount })} />}
-            {routine.goal.kind === "focus" && <Minutes label="Focus target (min)" value={routine.goal.amount} max={1440}
+            {routine.goal.kind === "focus" && <Minutes label={t("Focus target (min)")} value={routine.goal.amount} max={1440}
               set={amount => change("goal", { kind: "focus", amount })} />}
           </>}
           {(kind === "intervals" || kind === "sequence") &&
             <label className="check"><input type="checkbox" checked={routine.autoBreak}
-              onChange={event => change("autoBreak", event.currentTarget.checked)} /> Start breaks automatically</label>}
+              onChange={event => change("autoBreak", event.currentTarget.checked)} />{t("Start breaks automatically")}</label>}
           {(kind === "intervals" || kind === "sequence" || kind === "flowtime") &&
             <label className="check"><input type="checkbox" checked={routine.autoFocus}
-              onChange={event => change("autoFocus", event.currentTarget.checked)} /> Start focus intervals automatically</label>}
+              onChange={event => change("autoFocus", event.currentTarget.checked)} />{t("Start focus intervals automatically")}</label>}
         </div>
         <div className="controls preset-controls">
-          {own && <button type="button" disabled={model.busy} onClick={() => store(true)}>Save preset</button>}
-          <button type="button" disabled={model.busy} onClick={() => store(false)}>Save as new preset</button>
-          <button type="button" disabled={model.busy} onClick={() => store(false, true)}>Duplicate</button>
-          {own && !deleting && <button type="button" disabled={model.busy} onClick={() => confirmDelete(true)}>Delete</button>}
+          {own && <button type="button" disabled={model.busy} onClick={() => store(true)}>{t("Save preset")}</button>}
+          <button type="button" disabled={model.busy} onClick={() => store(false)}>{t("Save as new preset")}</button>
+          <button type="button" disabled={model.busy} onClick={() => store(false, true)}>{t("Duplicate")}</button>
+          {own && !deleting && <button type="button" disabled={model.busy} onClick={() => confirmDelete(true)}>{t("Delete")}</button>}
         </div>
         {deleting && (
           <div className="delete-preset">
-            <p>Delete this preset?</p>
+            <p>{t("Delete this preset?")}</p>
             <div className="controls">
-              <button type="button" onClick={() => confirmDelete(false)}>Cancel</button>
-              <button type="button" disabled={model.busy} onClick={remove}>Delete preset</button>
+              <button type="button" onClick={() => confirmDelete(false)}>{t("Cancel")}</button>
+              <button type="button" disabled={model.busy} onClick={remove}>{t("Delete preset")}</button>
             </div>
           </div>
         )}
@@ -341,9 +348,10 @@ function PresetSetup({ view, model, onStart }: { view: Workspace; model: Model; 
 }
 
 export function TimerPage({ model, onStart }: { model: Model; onStart: () => void }) {
+  const { t } = useLocale();
   return (
     <>
-      <h1 id="page-title">Timer</h1>
+      <h1 id="page-title">{t("Timer")}</h1>
       {model.view?.session && <SessionCard session={model.view.session} model={model} />}
       {model.view && !model.view.session && <PresetSetup view={model.view} model={model} onStart={onStart} />}
     </>

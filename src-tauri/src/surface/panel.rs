@@ -18,6 +18,14 @@ pub(super) fn rgb(value: &str, fallback: u32) -> u32 {
         .unwrap_or(fallback)
 }
 
+pub(super) fn mix(base: u32, target: u32, opacity: u8) -> u32 {
+    [0, 8, 16].into_iter().map(|shift| {
+        let alpha = u32::from(opacity);
+        let channel = (((base >> shift) & 255) * (255 - alpha) + ((target >> shift) & 255) * alpha) / 255;
+        channel << shift
+    }).sum()
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct Bounds {
     pub x: i32,
@@ -60,7 +68,10 @@ pub(super) struct Paint {
     pub thin: bool,
     pub movable: bool,
     pub scale: f64,
-    pub cue: Option<u32>,
+    pub gradient: Option<(u32, bool)>,
+    pub font: String,
+    pub clock_scale: f64,
+    pub clock_weight: i32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -206,10 +217,30 @@ unsafe fn fill(dc: HDC, rect: RECT, color: u32) {
     DeleteObject(brush);
 }
 
-unsafe fn text(dc: HDC, mut rect: RECT, value: &str, color: u32, size: i32, weight: i32) {
+unsafe fn gradient(dc: HDC, rect: RECT, start: u32, end: u32, vertical: bool) {
+    let width = (rect.right - rect.left).max(1);
+    let height = (rect.bottom - rect.top).max(1);
+    let span = if vertical { height } else { width };
+    let mut pixels = Vec::with_capacity(span as usize);
+    for pos in 0..span {
+        let color = mix(start, end, (255 * pos / (span - 1).max(1)) as u8);
+        pixels.push(((color & 255) << 16) | (color & 0xff00) | (color >> 16));
+    }
+    let (source_width, source_height) = if vertical { (1, height) } else { (width, 1) };
+    let mut info = BITMAPINFO::default();
+    info.bmiHeader = BITMAPINFOHEADER {
+        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: source_width,
+        biHeight: -source_height, biPlanes: 1, biBitCount: 32, biCompression: BI_RGB,
+        ..Default::default()
+    };
+    StretchDIBits(dc, rect.left, rect.top, width, height, 0, 0, source_width, source_height,
+        pixels.as_ptr().cast(), &info, DIB_RGB_COLORS, SRCCOPY);
+}
+
+unsafe fn text(dc: HDC, mut rect: RECT, value: &str, color: u32, size: i32, weight: i32, family: &str) {
     let font = CreateFontW(-size, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET as u32,
         OUT_DEFAULT_PRECIS as u32, CLIP_DEFAULT_PRECIS as u32, CLEARTYPE_QUALITY as u32,
-        DEFAULT_PITCH as u32, wide("Segoe UI").as_ptr());
+        DEFAULT_PITCH as u32, wide(family).as_ptr());
     let previous = SelectObject(dc, font);
     SetBkMode(dc, TRANSPARENT as i32);
     SetTextColor(dc, color);
@@ -220,7 +251,8 @@ unsafe fn text(dc: HDC, mut rect: RECT, value: &str, color: u32, size: i32, weig
 }
 
 unsafe fn render(dc: HDC, rect: RECT, data: &Paint) {
-    fill(dc, rect, data.cue.unwrap_or(data.color));
+    if let Some((end, vertical)) = data.gradient { gradient(dc, rect, data.color, end, vertical); }
+    else { fill(dc, rect, data.color); }
     if data.clock.is_empty() && data.detail.is_empty() && data.progress.is_none() { return; }
     let scale = |px: f64| (px * data.scale).round().max(1.0) as i32;
     let left = scale(11.0);
@@ -230,11 +262,12 @@ unsafe fn render(dc: HDC, rect: RECT, data: &Paint) {
     let text_bottom = if bar_height == 0 { rect.bottom } else { bar_bottom - bar_height - scale(3.0) };
     let time_bottom = if data.detail.is_empty() { text_bottom } else { text_bottom - scale(14.0) };
     if !data.clock.is_empty() {
-        text(dc, RECT { left, top: 0, right, bottom: time_bottom }, &data.clock, data.text, scale(21.0), 650);
+        text(dc, RECT { left, top: 0, right, bottom: time_bottom }, &data.clock, data.text,
+            scale(21.0 * data.clock_scale), data.clock_weight, &data.font);
     }
     if !data.detail.is_empty() {
         text(dc, RECT { left, top: if data.clock.is_empty() { 0 } else { time_bottom }, right, bottom: text_bottom },
-            &data.detail, data.text, scale(11.0), 450);
+            &data.detail, data.text, scale(11.0), 450, &data.font);
     }
     if let Some(progress) = data.progress {
         let start = if data.thin { 0 } else { left };

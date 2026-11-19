@@ -1,3 +1,4 @@
+import { useLocale } from "./locale";
 import { useEffect, useRef } from "react";
 import type { AnimationItem } from "lottie-web";
 import mark from "../assets/branding/TimerOS-mark-transparent.png";
@@ -9,6 +10,7 @@ import type { SplashChoice } from "./appearance";
 const animations = { Bloom: bloomUrl, Origami: origamiUrl, Signal: signalUrl };
 
 export function StartupSplash({ choice, onComplete }: { choice: Exclude<SplashChoice, "Off">; onComplete: () => void }) {
+  const { t } = useLocale();
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,7 +71,7 @@ export function StartupSplash({ choice, onComplete }: { choice: Exclude<SplashCh
   }, [choice, onComplete]);
 
   return (
-    <div className="startup" role="status" aria-label="Starting TimerOS">
+    <div className="startup" role="status" aria-label={t("Starting TimerOS")}>
       <div className="startup-animation" ref={container} aria-hidden="true" />
       <img className="startup-mark" src={mark} alt="" width={108} height={108} />
     </div>
