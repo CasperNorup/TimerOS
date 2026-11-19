@@ -1,0 +1,11 @@
+[package]
+name = "timeros"
+version = "0.1.3"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "=2.7.5"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = "=2.12.6"

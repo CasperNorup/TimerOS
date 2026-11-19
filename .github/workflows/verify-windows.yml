@@ -1,0 +1,93 @@
+name: TimerOS Windows verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/verify-windows.yml'
+      - 'index.html'
+      - 'package*.json'
+      - 'tsconfig.json'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: timeros-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - run: npm ci
+      - run: npm test
+      - name: Build the Windows installer
+        id: package
+        run: |
+          npm run tauri -- build -- --locked
+          if ($LASTEXITCODE -ne 0) { throw 'TimerOS installer build failed.' }
+          $version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $installers = @(Get-ChildItem -LiteralPath 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe')
+          if ($installers.Count -ne 1) { throw 'Expected one TimerOS Windows installer.' }
+          "TIMEROS_VERSION=$version" >> $env:GITHUB_ENV
+          "TIMEROS_INSTALLER=$($installers[0].FullName)" >> $env:GITHUB_ENV
+      - name: Verify the installed Windows app
+        run: ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER
+      - name: Verify the timer and recovery in WebView2
+        if: always() && steps.package.outcome == 'success'
+        run: |
+          $env:TIMEROS_WEBVIEW_PORT = '9238'
+          $base = Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $base.app.windows[0].title = 'TimerOS Smoke Test'
+          $browserArguments = "--remote-debugging-port=$env:TIMEROS_WEBVIEW_PORT --proxy-server=http://127.0.0.1:1"
+          $base.app.windows[0] | Add-Member -NotePropertyName additionalBrowserArgs -NotePropertyValue $browserArguments
+          $id = "com.caspernorup.timeros.smoke.$env:GITHUB_RUN_ID.$env:GITHUB_RUN_ATTEMPT"
+          $smoke = @{ identifier = $id; app = @{ windows = $base.app.windows } }
+          $config = Join-Path $env:RUNNER_TEMP 'timeros-smoke.json'
+          $smoke | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $config
+          npm run tauri -- build --no-bundle --config $config -- --locked
+          if ($LASTEXITCODE -ne 0) { throw 'TimerOS smoke build failed.' }
+          $exe = (Resolve-Path -LiteralPath 'src-tauri/target/release/timeros.exe').Path
+          foreach ($scenario in @('initial','restored')) {
+              $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+              $env:TIMEROS_TEST_PID = $process.Id
+              try {
+                  npm run test:windows -- $scenario
+                  if ($LASTEXITCODE -ne 0) { throw "TimerOS $scenario smoke test failed." }
+                  ./tests/windows-signal.ps1 -TargetProcessId $process.Id -Title 'TimerOS Smoke Test' -Signal quit
+                  if (!$process.WaitForExit(10000) -or $process.ExitCode -ne 0) {
+                      throw 'The test app did not close cleanly.'
+                  }
+              } finally {
+                  if (!$process.HasExited) { Stop-Process -Id $process.Id }
+              }
+          }
+      - name: Upload the Windows installer
+        if: always() && steps.package.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimerOS-${{ env.TIMEROS_VERSION }}-Windows-x64
+          path: ${{ env.TIMEROS_INSTALLER }}
+          if-no-files-found: error
+          retention-days: 60
