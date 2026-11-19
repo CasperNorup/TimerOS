@@ -23,6 +23,7 @@ export type MiniSettings = {
   freeY: number;
   opacity: number;
   size: number;
+  inheritTheme: boolean;
   color: string;
   text: string;
   accent: string;
@@ -64,7 +65,7 @@ export function newDesktopSettings(): DesktopSettings {
   return {
     mini: {
       enabled: true, monitor: "", placement: "right", freeX: 1, freeY: 1, opacity: 90,
-      size: 100, color: "#111e35", text: "#ffffff", accent: "#73b1ff",
+      size: 100, inheritTheme: false, color: "#111e35", text: "#ffffff", accent: "#73b1ff",
       showTime: true, showProgress: true, showPhase: false, showRounds: false,
       progressStyle: "bar",
     },

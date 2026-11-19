@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cueNames, newDesktopSettings, shortcutNames, type Cue, type CueSettings, type DesktopSettings } from "./desktopSettings";
 import { act, displayTime, minute, phaseName } from "./timer";
+import { miniColors, type PaletteColors } from "./appearance";
 import type { useTimer } from "./useTimer";
 
 export type DesktopCommand = "start" | "move" | "save-move" | "cancel-move" | "dismiss" | "quit";
@@ -34,8 +35,9 @@ export function formatClock(ms: number, countUp = false): string {
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
 }
 
-export function useDesktop(model: ReturnType<typeof useTimer>) {
+export function useDesktop(model: ReturnType<typeof useTimer>, palette: PaletteColors) {
   const timer = useRef(model);
+  const activePalette = useRef(palette);
   const settings = model.view?.desktop ?? newDesktopSettings();
   const busy = useRef(false);
   const commands = useRef<DesktopCommand[]>([]);
@@ -44,6 +46,7 @@ export function useDesktop(model: ReturnType<typeof useTimer>) {
   const [report, setReport] = useState(empty);
   const [error, setError] = useState("");
   timer.current = model;
+  activePalette.current = palette;
 
   const send = useCallback(async () => {
     const current = timer.current;
@@ -68,7 +71,8 @@ export function useDesktop(model: ReturnType<typeof useTimer>) {
         (session.status === "paused" ? " · Paused" : session.status === "ready" ? " · Ready" : "") : "Preview";
       const result = await native.invoke<Report>("present_desktop", {
         frame: {
-          mini: desktop.mini, active: Boolean(session), status: session?.status ?? "idle", phase,
+          mini: { ...desktop.mini, ...miniColors(desktop.mini, activePalette.current) },
+          active: Boolean(session), status: session?.status ?? "idle", phase,
           clock: reading ? formatClock(reading.countUp ? reading.elapsed : reading.remaining ?? 0, reading.countUp)
             : formatClock(25 * minute),
           rounds: session?.rounds ?? 0,
@@ -116,7 +120,7 @@ export function useDesktop(model: ReturnType<typeof useTimer>) {
     const interval = window.setInterval(() => void send(), 300);
     return () => window.clearInterval(interval);
   }, [loaded, send]);
-  useEffect(() => { if (loaded) void send(); }, [settings, stamp, loaded, send]);
+  useEffect(() => { if (loaded) void send(); }, [settings, palette, stamp, loaded, send]);
 
   const command = (action: DesktopCommand) => {
     if (!native) return;

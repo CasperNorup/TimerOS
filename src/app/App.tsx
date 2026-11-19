@@ -1,41 +1,35 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { version } from "../../package.json";
-import mark from "../assets/branding/TimerOS-mark-transparent.png";
 import appIcon from "../assets/branding/TimerOS-app-icon-transparent.png";
 import { StartupSplash } from "./StartupSplash";
 import { TimerPage } from "./TimerPage";
 import { useTimer } from "./useTimer";
 import { useDesktop } from "./useDesktop";
 import { DesktopPreferences } from "./DesktopPreferences";
+import { AppearancePreferences } from "./AppearancePreferences";
+import { activeTheme, newAppearance, paletteTokens, typographyTokens } from "./appearance";
+import { useBackgroundImage } from "./appearanceImages";
 import type { Interruption, Policy } from "./timer";
 
-const appearances = ["System", "Light", "Dark"] as const;
-type Appearance = typeof appearances[number];
 type Page = "Timer" | "Settings";
-
-const appearanceKey = "timeros.appearance.v1";
+const defaultAppearance = newAppearance();
 const interruptions: [Interruption, string][] = [
   ["lock", "When Windows locks"],
   ["sleep", "When the PC sleeps"],
   ["quit", "When TimerOS closes"],
 ];
 
-function readAppearance(): Appearance {
-  try {
-    const saved = localStorage.getItem(appearanceKey);
-    return appearances.find(appearance => appearance === saved) ?? "System";
-  } catch {
-    return "System";
-  }
-}
-
 export function App() {
   const [starting, setStarting] = useState(true);
-  const [appearance, setAppearance] = useState(readAppearance);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
   const [page, setPage] = useState<Page>("Timer");
   const timer = useTimer();
-  const desktop = useDesktop(timer);
+  const appearance = timer.view?.appearance ?? defaultAppearance;
+  const variant = appearance.mode === "Dark" || (appearance.mode === "System" && systemDark) ? "dark" : "light";
+  const palette = activeTheme(appearance)[variant];
+  const desktop = useDesktop(timer, palette);
+  const background = appearance.background;
+  const { url, missing } = useBackgroundImage(background);
   const main = useRef<HTMLElement>(null);
   const movedPage = useRef(false);
 
@@ -45,22 +39,32 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.appearance = appearance.toLowerCase();
-  }, [appearance]);
+    const scheme = matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    scheme.addEventListener("change", onChange);
+    return () => scheme.removeEventListener("change", onChange);
+  }, []);
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.appearance = variant;
+    root.toggleAttribute("data-custom-background", Boolean(url || background.kind === "solid" || background.kind === "gradient"));
+    const image = background.kind === "gradient"
+      ? "linear-gradient(" + background.angle + "deg, " + background.color + ", " + background.end + ")"
+      : url ? 'url("' + url + '")' : "none";
+    const styles = {
+      ...paletteTokens(palette), ...typographyTokens(appearance),
+      "--background-color": background.kind === "solid" ? background.color : palette.canvas,
+      "--background-image": image,
+      "--background-position": url ? background.x + "% " + background.y + "%" : "center",
+      "--background-size": url ? background.fit : "cover",
+    };
+    for (const [property, value] of Object.entries(styles)) root.style.setProperty(property, value);
+  }, [appearance, background, palette, url, variant]);
 
   useEffect(() => {
     if (movedPage.current) main.current?.focus();
   }, [page]);
-
-  function changeAppearance(next: Appearance) {
-    setAppearance(next);
-    try {
-      localStorage.setItem(appearanceKey, next);
-      setSaveFailed(false);
-    } catch {
-      setSaveFailed(true);
-    }
-  }
 
   function navigate(next: Page) {
     if (page === next) return;
@@ -68,14 +72,17 @@ export function App() {
     setPage(next);
   }
 
-  useEffect(() => { if (timer.restored) finishStartup(); }, [timer.restored, finishStartup]);
+  const skipStartup = timer.restored || appearance.splash === "Off" || Boolean(timer.error && !timer.view);
+  useLayoutEffect(() => {
+    if (starting && skipStartup) finishStartup();
+  }, [starting, skipStartup, finishStartup]);
 
   if (starting && !timer.view && !timer.error) {
-    return <div className="startup" role="status" aria-label="Starting TimerOS">
-      <img src={mark} alt="" width={108} height={108} />
-    </div>;
+    return <div className="startup" role="status" aria-label="Starting TimerOS" />;
   }
-  if (starting && !timer.restored) return <StartupSplash onComplete={finishStartup} />;
+  if (starting && !skipStartup && appearance.splash !== "Off") {
+    return <StartupSplash choice={appearance.splash} onComplete={finishStartup} />;
+  }
 
   return (
     <div className="app">
@@ -109,20 +116,9 @@ export function App() {
         ) : (
           <>
             <h1 id="page-title">Settings</h1>
-            <section className="panel settings" aria-labelledby="appearance-title">
-              <h2 id="appearance-title">Appearance</h2>
-              <label className="setting-row">
-                <span>Display mode</span>
-                <select
-                  value={appearance}
-                  onChange={event => changeAppearance(event.currentTarget.value as Appearance)}
-                >
-                  {appearances.map(option => <option key={option}>{option}</option>)}
-                </select>
-              </label>
-              {saveFailed && <p role="status">This display mode could only be applied for this launch.</p>}
-            </section>
-            {timer.view && <DesktopPreferences desktop={desktop} />}
+            {timer.view && <AppearancePreferences appearance={appearance} variant={variant} missingImage={missing}
+              change={apply => timer.update(state => apply(state.appearance))} />}
+            {timer.view && <DesktopPreferences desktop={desktop} palette={palette} />}
             {timer.view && <section className="panel settings" aria-labelledby="recovery-title">
               <h2 id="recovery-title">Timer recovery</h2>
               {interruptions.map(([event, label]) => (

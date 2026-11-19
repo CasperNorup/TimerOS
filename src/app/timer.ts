@@ -1,4 +1,5 @@
 import { newDesktopSettings, readDesktopSettings, type DesktopSettings } from "./desktopSettings.ts";
+import { newAppearance, readAppearance, type Appearance, type DisplayMode } from "./appearance.ts";
 
 export const minute = 60_000;
 export const maxBlockMinutes = 720;
@@ -51,6 +52,7 @@ export type Workspace = {
   transition: Transition | null;
   checkpoint: number;
   desktop: DesktopSettings;
+  appearance: Appearance;
 };
 export type TimerAction = "pause" | "resume" | "next" | "skip" | "restart" | "add" | "stop";
 
@@ -77,11 +79,12 @@ export const builtIns: Preset[] = [
   { id: "flowtime", routine: { ...classic, name: "Flowtime", kind: "flowtime", flow: defaultFlowBreaks } },
 ];
 
-export function newWorkspace(): Workspace {
+export function newWorkspace(legacyMode?: DisplayMode): Workspace {
   return {
     version: 1, presets: [], nextPreset: 1, lastPreset: "classic",
     policies: { lock: "pause", sleep: "pause", quit: "pause" },
     session: null, result: null, transition: null, checkpoint: 0, desktop: newDesktopSettings(),
+    appearance: newAppearance(legacyMode),
   };
 }
 
@@ -166,7 +169,7 @@ function decodeSession(session: Session) {
   if (session.routine.kind === "flowtime" && session.phase !== "focus" && !isMinutes(session.flowBreak)) throw new Error();
 }
 
-export function decodeWorkspace(json: string): Workspace {
+export function decodeWorkspace(json: string, legacyMode?: DisplayMode): Workspace {
   try {
     const state = JSON.parse(json) as Workspace;
     if (state.version !== 1 || !Array.isArray(state.presets) || !integer(state.nextPreset, 1)
@@ -190,6 +193,7 @@ export function decodeWorkspace(json: string): Workspace {
     if (transition !== null && (!integer(transition.id, 1) ||
         !["focus-ended", "break-ended", "finished"].includes(transition.event))) throw new Error();
     state.desktop = readDesktopSettings(state.desktop);
+    state.appearance = readAppearance(state.appearance, legacyMode);
     return state;
   } catch {
     throw new Error("Saved TimerOS data could not be read. The original file is still available.");

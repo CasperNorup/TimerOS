@@ -57,8 +57,8 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: 14524858886
-          run-id: 44515912158
+          artifact-ids: 14533333097
+          run-id: 44528845587
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ runner.temp }}/timeros-previous
       - name: Verify the installed Windows app
