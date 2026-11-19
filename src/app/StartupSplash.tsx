@@ -2,8 +2,13 @@ import { useEffect, useRef } from "react";
 import type { AnimationItem } from "lottie-web";
 import mark from "../assets/branding/TimerOS-mark-transparent.png";
 import bloomUrl from "../assets/branding/TimerOS-splash-bloom.json?url";
+import origamiUrl from "../assets/branding/TimerOS-splash-origami.json?url";
+import signalUrl from "../assets/branding/TimerOS-splash-signal.json?url";
+import type { SplashChoice } from "./appearance";
 
-export function StartupSplash({ onComplete }: { onComplete: () => void }) {
+const animations = { Bloom: bloomUrl, Origami: origamiUrl, Signal: signalUrl };
+
+export function StartupSplash({ choice, onComplete }: { choice: Exclude<SplashChoice, "Off">; onComplete: () => void }) {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,12 +27,12 @@ export function StartupSplash({ onComplete }: { onComplete: () => void }) {
     const timeout = window.setTimeout(finish, 6500);
     motion.addEventListener("change", finish);
 
-    async function playBloom() {
+    async function playAnimation() {
       const [response, { default: lottie }] = await Promise.all([
-        fetch(bloomUrl, { signal: request.signal }),
+        fetch(animations[choice], { signal: request.signal }),
         import("lottie-web/build/player/lottie_light"),
       ]);
-      if (!response.ok) throw new Error("Bloom animation is unavailable.");
+      if (!response.ok) throw new Error("The startup animation is unavailable.");
       const playback = await response.json();
       if (!stage || request.signal.aborted) return;
 
@@ -54,14 +59,14 @@ export function StartupSplash({ onComplete }: { onComplete: () => void }) {
       animation.addEventListener("error", finish);
     }
 
-    void playBloom().catch(finish);
+    void playAnimation().catch(finish);
     return () => {
       request.abort();
       window.clearTimeout(timeout);
       motion.removeEventListener("change", finish);
       animation?.destroy();
     };
-  }, [onComplete]);
+  }, [choice, onComplete]);
 
   return (
     <div className="startup" role="status" aria-label="Starting TimerOS">

@@ -1,30 +1,12 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
+import { miniColors, type PaletteColors } from "./appearance";
 import { cueNames, normalizeShortcut, pulsePeriod, shortcutNames, type AlertStyle,
   type Chime, type Cue, type DesktopSettings as Preferences, type MiniSettings,
   type Placement, type Shortcut } from "./desktopSettings";
 import type { useDesktop } from "./useDesktop";
+import { Range, Color } from "./SettingsFields";
 
 type Desktop = ReturnType<typeof useDesktop>;
-
-function Range({ label, value, min, max, step = 1, suffix, change }: {
-  label: string; value: number; min: number; max: number; step?: number; suffix?: string; change: (value: number) => void;
-}) {
-  return <label className="setting-row">
-    <span>{label}</span>
-    <div className="slider">
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={event => change(event.currentTarget.valueAsNumber)} />
-      <output>{value}{suffix}</output>
-    </div>
-  </label>;
-}
-
-function Color({ label, value, change }: { label: string; value: string; change: (value: string) => void }) {
-  return <label className="setting-row">
-    <span>{label}</span>
-    <input type="color" value={value} onChange={event => change(event.currentTarget.value)} />
-  </label>;
-}
 
 function Check({ label, value, change }: { label: string; value: boolean; change: (value: boolean) => void }) {
   return <label className="setting-row">
@@ -48,8 +30,9 @@ function Monitor({ desktop, label, selected, change }: {
   </label>;
 }
 
-function MiniTimerSettings({ desktop }: { desktop: Desktop }) {
+function MiniTimerSettings({ desktop, palette }: { desktop: Desktop; palette: PaletteColors }) {
   const mini = desktop.settings.mini;
+  const preview = miniColors(mini, palette);
   const set = <K extends keyof MiniSettings>(key: K, value: MiniSettings[K]) => {
     void desktop.change(prefs => {
       prefs.mini[key] = value;
@@ -89,9 +72,26 @@ function MiniTimerSettings({ desktop }: { desktop: Desktop }) {
           <option value="bar">Inset bar</option><option value="line">Edge line</option>
         </select>
       </label>}
-      <Color label="Mini timer background" value={mini.color} change={value => set("color", value)} />
-      <Color label="Mini timer text" value={mini.text} change={value => set("text", value)} />
-      <Color label="Progress color" value={mini.accent} change={value => set("accent", value)} />
+      <label className="setting-row"><span>Mini timer colors</span>
+        <select value={mini.inheritTheme ? "theme" : "custom"} onChange={event => set("inheritTheme", event.currentTarget.value === "theme")}>
+          <option value="theme">Match app theme</option><option value="custom">Independent colors</option>
+        </select>
+      </label>
+      {!mini.inheritTheme && <>
+        <Color label="Mini timer background" value={mini.color} change={value => set("color", value)} />
+        <Color label="Mini timer text" value={mini.text} change={value => set("text", value)} />
+        <Color label="Progress color" value={mini.accent} change={value => set("accent", value)} />
+      </>}
+      <div className="mini-preview-area" role="img" aria-label="Mini timer preview">
+        <div className="mini-preview" data-progress={mini.progressStyle} style={{
+          "--mini-color": preview.color, "--mini-text": preview.text, "--mini-accent": preview.accent,
+          "--mini-scale": mini.size / 100, opacity: mini.opacity / 100,
+        } as CSSProperties}>
+          {mini.showTime && <strong>18:45</strong>}
+          {(mini.showPhase || mini.showRounds) && <span>{[mini.showPhase ? "Focus" : "", mini.showRounds ? "Round 1" : ""].filter(Boolean).join(" · ")}</span>}
+          {mini.showProgress && <div className="mini-preview-track" />}
+        </div>
+      </div>
     </details>
   );
 }
@@ -196,10 +196,10 @@ function ShortcutEditor({ desktop, action, status }: { desktop: Desktop; action:
   );
 }
 
-export function DesktopPreferences({ desktop }: { desktop: Desktop }) {
+export function DesktopPreferences({ desktop, palette }: { desktop: Desktop; palette: PaletteColors }) {
   return (
     <>
-      <MiniTimerSettings desktop={desktop} />
+      <MiniTimerSettings desktop={desktop} palette={palette} />
       <AlertSettings desktop={desktop} />
       <details className="panel edit desktop-settings">
         <summary>Global shortcuts</summary>

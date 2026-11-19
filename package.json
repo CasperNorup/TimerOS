@@ -1,6 +1,6 @@
 {
   "name": "timeros",
-  "version": "0.3.2",
+  "version": "0.4.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "dev:windows": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
-    "test": "node --disable-warning=ExperimentalWarning --test tests/timer.test.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.ts",
     "test:windows": "node tests/windows-smoke.mjs"
   },
   "dependencies": {

@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
+import { verifyAppearance, verifySavedAppearance } from "./appearance-smoke.mjs";
 
 const endpoint = "http://127.0.0.1:" + process.env.TIMEROS_WEBVIEW_PORT;
 const scenario = process.argv[2] || "initial";
@@ -60,6 +61,7 @@ try {
     await named("Resume").click();
     await named("Pause").waitFor();
     await named("Settings").click();
+    await verifySavedAppearance(page);
     await page.getByText("Mini timer", { exact: true }).click();
     assert.equal(await page.getByRole("combobox", { name: "Placement" }).inputValue(), "free");
     await page.getByText("Alerts and sound", { exact: true }).click();
@@ -126,6 +128,7 @@ async function verifyFirstLaunch(page, heading, named, current) {
   assert.equal(await page.locator("html").getAttribute("data-appearance"), "dark");
   await page.getByRole("button", { name: "Settings" }).click();
   assert.equal(await mode.inputValue(), "Dark");
+  await verifyAppearance(page, heading, named);
 
   await page.getByRole("combobox", { name: "When the PC sleeps" }).selectOption("continue");
   await page.waitForFunction(() => Array.from(document.querySelectorAll('select'))

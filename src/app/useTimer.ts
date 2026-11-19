@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { act, decodeWorkspace, newWorkspace, reconcile, recover, type Workspace } from "./timer";
+import type { DisplayMode } from "./appearance";
 
 type Signal = { kind: "lock" | "sleep"; active: boolean; at: number };
 type Lifecycle = { signals: Signal[]; lockTracking: boolean; sleepTracking: boolean };
@@ -9,6 +10,16 @@ type TauriWindow = Window & { __TAURI__?: { core: { invoke: <T>(name: string, ar
 const native = (window as TauriWindow).__TAURI__?.core;
 const previewKey = "timeros.workspace.preview";
 const checkpointInterval = 10_000;
+
+function legacyDisplayMode(): DisplayMode {
+  try {
+    const saved = localStorage.getItem("timeros.appearance.v1");
+    if (saved === "Light" || saved === "Dark") return saved;
+  } catch {
+    // A profile with disabled WebView storage can still use the workspace.
+  }
+  return "System";
+}
 
 function getSaved(): Promise<Loaded> {
   return native
@@ -44,7 +55,8 @@ export function useTimer() {
     setBusy(true);
     try {
       const saved = await getSaved();
-      const loaded = saved.contents !== null ? decodeWorkspace(saved.contents) : newWorkspace();
+      const mode = legacyDisplayMode();
+      const loaded = saved.contents !== null ? decodeWorkspace(saved.contents, mode) : newWorkspace(mode);
       setBaselineCue(loaded.transition?.id ?? 0);
       setRestored(loaded.session !== null);
       const time = Date.now();
