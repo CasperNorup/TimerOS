@@ -35,7 +35,7 @@ pub struct Frame {
     clock: String,
     phase: String,
     rounds: u64,
-    progress: f64,
+    progress: Option<f64>,
     shortcuts: [String; 5],
     reduced_motion: bool,
     #[serde(default)]
