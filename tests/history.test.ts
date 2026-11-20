@@ -52,11 +52,26 @@ test("totals are grouped by local calendar day and a Monday-based week", () => {
 });
 
 test("older workspaces default to English and preserve timer appearance", () => {
-  const { language: _language, history: _history, compactSidebar: _sidebar, ...old } = newWorkspace("Dark");
+  const { language: _language, history: _history, ...old } = newWorkspace("Dark");
   old.desktop.mini.font = "Georgia";
   const state = decodeWorkspace(JSON.stringify(old));
   assert.equal(state.language, "en");
   assert.deepEqual(state.history, { enabled: false, sessions: [] });
   assert.equal(state.appearance.mode, "Dark");
   assert.equal(state.desktop.mini.font, "Georgia");
+});
+
+test("0.5.3 workspaces preserve settings and history when dropping the sidebar preference", () => {
+  const old = { ...newWorkspace("Dark"), language: "da", compactSidebar: true };
+  old.desktop.mini.font = "Georgia";
+  old.history.enabled = true;
+  startSession(old, countdown, "countdown", start, "Ring theory");
+  act(old, "stop", start + minute);
+
+  const state = decodeWorkspace(JSON.stringify(old));
+  assert.equal(state.language, "da");
+  assert.equal(state.appearance.mode, "Dark");
+  assert.equal(state.desktop.mini.font, "Georgia");
+  assert.deepEqual(state.history, old.history);
+  assert.equal("compactSidebar" in state, false);
 });

@@ -55,23 +55,17 @@ jobs:
           "TIMEROS_VERSION=$version" >> $env:GITHUB_ENV
           "TIMEROS_INSTALLER=$($installers[0].FullName)" >> $env:GITHUB_ENV
       - name: Download the previous preview installer
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: 14534263438
-          run-id: 44532073083
+          artifact-ids: 14535714781
+          run-id: 44537375104
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ runner.temp }}/timeros-previous
       - name: Verify the installed Windows app
         run: |
           $fixture = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/timeros-previous" -File -Filter '*-setup.exe' -Recurse -ErrorAction SilentlyContinue)
-          if ($fixture.Count -gt 1) { throw 'Expected one previous preview installer.' }
-          if ($fixture.Count -eq 1) {
-              ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER -PreviousInstaller $fixture[0].FullName
-          } else {
-              Write-Host 'Previous installer unavailable. Verifying a fresh install.'
-              ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER
-          }
+          if ($fixture.Count -ne 1) { throw 'Expected one TimerOS 0.5.3 installer for the upgrade check.' }
+          ./tests/windows-installer.ps1 -Installer $env:TIMEROS_INSTALLER -PreviousInstaller $fixture[0].FullName
       - name: Test native layout and pulse timing
         if: always() && steps.package.outcome == 'success'
         run: cargo test --manifest-path src-tauri/Cargo.toml --release --features tauri/custom-protocol --locked

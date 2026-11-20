@@ -16,7 +16,6 @@ import type { Interruption, Policy } from "./timer";
 
 type Page = "Timer" | "History" | "Settings";
 const defaultAppearance = newAppearance();
-const navigation: Record<Page, string> = { Timer: "◷", History: "▤", Settings: "⚙" };
 const interruptions: [Interruption, string][] = [
   ["lock", "When Windows locks"],
   ["sleep", "When the PC sleeps"],
@@ -71,7 +70,10 @@ export function App() {
   }, [appearance, background, language, palette, url, variant]);
 
   useEffect(() => {
-    if (movedPage.current) main.current?.focus();
+    if (movedPage.current) {
+      main.current?.focus({ preventScroll: true });
+      window.scrollTo(0, 0);
+    }
   }, [page]);
 
   function navigate(next: Page) {
@@ -94,39 +96,26 @@ export function App() {
 
   return (
     <Locale.Provider value={language}>
-    <div className="app" data-compact={timer.view?.compactSidebar || undefined}>
-      <aside className="app-header">
-        <div className="brand">
-          <img src={appIcon} alt="" width={34} height={34} />
-          <span>TimerOS</span>
+    <div className="app">
+      <header className="app-header">
+        <div className="header-content">
+          <div className="brand">
+            <img src={appIcon} alt="" width={34} height={34} />
+            <span>TimerOS</span>
+          </div>
+          <div className="controls">
+            {page === "Timer" ? (
+              <button type="button" onClick={() => navigate("Settings")}>{t("Settings")}</button>
+            ) : (
+              <button type="button" onClick={() => navigate(page === "History" ? "Settings" : "Timer")}>
+                {t(page === "History" ? "Back to Settings" : "Back to Timer")}
+              </button>
+            )}
+          </div>
         </div>
-        <nav aria-label={t("Main navigation")}>
-          {(Object.keys(navigation) as Page[]).map(item => (
-            <button
-              key={item}
-              type="button"
-              aria-current={page === item ? "page" : undefined} aria-label={t(item)} title={t(item)}
-              onClick={() => navigate(item)}
-            ><span aria-hidden="true">{navigation[item]}</span><span className="nav-label">{t(item)}</span></button>
-          ))}
-        </nav>
-        <footer className="sidebar-footer">
-          <button type="button" className="sidebar-toggle" disabled={!timer.view}
-            aria-label={t(timer.view?.compactSidebar ? "Expand sidebar" : "Collapse sidebar")}
-            title={t(timer.view?.compactSidebar ? "Expand sidebar" : "Collapse sidebar")}
-            onClick={() => void timer.update(state => { state.compactSidebar = !state.compactSidebar; })}>
-            <span aria-hidden="true">{timer.view?.compactSidebar ? "›" : "‹"}</span>
-            <span className="nav-label">{t("Collapse")}</span>
-          </button>
-          <button type="button" className="about-trigger" aria-haspopup="dialog" aria-label={t("About TimerOS")}
-            title={t("About TimerOS") + " v" + version} onClick={() => setAbout(true)}>
-            <span aria-hidden="true">ⓘ</span>
-            <span className="nav-label">{t("About")} <span className="about-version">v{version}</span></span>
-          </button>
-        </footer>
-      </aside>
+      </header>
 
-      <main ref={main} tabIndex={-1} aria-labelledby="page-title">
+      <main ref={main} tabIndex={-1} aria-labelledby={page === "Timer" ? "timer-title" : "page-title"}>
         {timer.error && <p className="status-error" role="alert">{t(timer.error)}</p>}
         {desktop.error && <p className="status-error" role="alert">{t(desktop.error)}</p>}
         {desktop.report.message && <div className="alert-status">
@@ -134,11 +123,18 @@ export function App() {
           <div className="controls"><button type="button" onClick={() => desktop.command("dismiss")}>{t("Dismiss alert")}</button></div>
         </div>}
         {!timer.view && !timer.busy && <button type="button" onClick={() => void timer.load()}>{t("Retry loading timer")}</button>}
-        {page === "Timer" ? (
+        <div hidden={page !== "Timer"}>
           <TimerPage model={timer} onStart={() => desktop.command("start")} />
-        ) : page === "History" ? <HistoryPage model={timer} /> : (
+        </div>
+        {page === "History" && <HistoryPage model={timer} />}
+        {page === "Settings" && (
           <>
             <h1 id="page-title">{t("Settings")}</h1>
+            <div className="controls settings-links">
+              <button type="button" onClick={() => navigate("History")}>{t("History")}</button>
+              <button type="button" aria-haspopup="dialog" title={t("About TimerOS") + " v" + version}
+                onClick={() => setAbout(true)}>{t("About TimerOS")}</button>
+            </div>
             {timer.view && <section className="panel settings language-settings" aria-labelledby="language-title">
               <h2 id="language-title">{t("Language")}</h2>
               <label className="setting-row"><span>{t("App language")}</span>

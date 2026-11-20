@@ -351,7 +351,7 @@ export function TimerPage({ model, onStart }: { model: Model; onStart: () => voi
   const { t } = useLocale();
   return (
     <>
-      <h1 id="page-title">{t("Timer")}</h1>
+      <h1 id="timer-title">{t("Timer")}</h1>
       {model.view?.session && <SessionCard session={model.view.session} model={model} />}
       {model.view && !model.view.session && <PresetSetup view={model.view} model={model} onStart={onStart} />}
     </>

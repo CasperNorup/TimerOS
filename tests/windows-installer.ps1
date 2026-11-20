@@ -16,7 +16,7 @@ if ($PreviousInstaller) {
     $fixtureDir = Join-Path $env:APPDATA 'com.caspernorup.timeros'
     New-Item -Path $fixtureDir -ItemType Directory -Force | Out-Null
     $fixture = Join-Path $fixtureDir 'workspace.json'
-    $state = '{"version":1,"presets":[{"id":"custom-1","routine":{"name":"Upgrade fixture","kind":"countdown","focus":12,"short":5,"long":15,"longEvery":4,"autoBreak":true,"autoFocus":true,"goal":{"kind":"open"}}}],"nextPreset":2,"lastPreset":"custom-1","policies":{"lock":"continue","sleep":"pause","quit":"continue"},"session":null,"result":null,"transition":null,"checkpoint":0}'
+    $state = '{"version":1,"presets":[{"id":"custom-1","routine":{"name":"Upgrade fixture","kind":"countdown","focus":12,"short":5,"long":15,"longEvery":4,"autoBreak":true,"autoFocus":true,"goal":{"kind":"open"}}}],"nextPreset":2,"lastPreset":"custom-1","policies":{"lock":"continue","sleep":"pause","quit":"continue"},"session":null,"result":null,"transition":null,"checkpoint":0,"appearance":{"mode":"Dark"},"language":"da","compactSidebar":true,"history":{"enabled":true,"sessions":[{"endedAt":1795081200000,"reason":"stopped","name":"Upgrade fixture","subject":"Ring theory","focusTime":60000}]}}'
     Set-Content -LiteralPath $fixture -Value $state -Encoding utf8NoBOM
     $originalHash = (Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash
 }
@@ -97,5 +97,5 @@ try {
 
 Write-Host "Verified the TimerOS $version per-user install, Start menu shortcut, app icon, and launch."
 Write-Host 'Verified the transparent icon in the app executable and installer.'
-if ($PreviousInstaller) { Write-Host 'Verified reinstalling over the previous preview preserved the workspace.' }
+if ($PreviousInstaller) { Write-Host 'Verified upgrading from 0.5.3 preserved the workspace, including settings and history.' }
 Write-Host "SHA-256: $((Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash)"

@@ -68,7 +68,7 @@ try {
     assert.equal(await page.getByRole("combobox", { name: "Placement" }).inputValue(), "free");
     await page.getByText("Alerts and sound", { exact: true }).click();
     assert.equal(await page.getByRole("checkbox", { name: "Repeat until dismissed" }).isChecked(), true);
-    await named("Timer").click();
+    await named("Back to Timer").click();
     await named("Stop").click();
     await page.getByText(/Session stopped/).waitFor();
     console.log("Verified a clean app restart restores an unfinished session in the paused state.");
@@ -85,7 +85,6 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await page.locator(".startup-animation.is-playing svg").waitFor({ timeout: 8_000 });
   await heading.waitFor({ timeout: 12_000 });
   assert.equal(await page.getByText("25:00", { exact: true }).count(), 1);
-  assert.match(await named("About TimerOS").getAttribute("title"), /^About TimerOS v\d+\.\d+\.\d+$/);
   const headerIcon = await page.locator(".brand img").evaluate(async image => {
     await image.decode();
     const canvas = document.createElement("canvas");
@@ -117,7 +116,7 @@ async function verifyFirstLaunch(page, heading, named, current) {
   const mode = page.getByRole("combobox", { name: "Display mode" });
   await mode.selectOption("Dark");
   await page.waitForFunction(() => document.documentElement.dataset.appearance === "dark");
-  await page.getByRole("button", { name: "Timer", exact: true }).click();
+  await page.getByRole("button", { name: "Back to Timer", exact: true }).click();
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   const requestedBloom = [];
@@ -130,6 +129,7 @@ async function verifyFirstLaunch(page, heading, named, current) {
   assert.equal(await page.locator("html").getAttribute("data-appearance"), "dark");
   await page.getByRole("button", { name: "Settings" }).click();
   assert.equal(await mode.inputValue(), "Dark");
+  await named("Back to Timer").click();
   await verifyAppearance(page, heading, named);
   await verifyPhaseFive(page, async () => {
     await inspectUntil(smokeTitle, window => window.minimized);
@@ -140,7 +140,7 @@ async function verifyFirstLaunch(page, heading, named, current) {
   await page.getByRole("combobox", { name: "When the PC sleeps" }).selectOption("continue");
   await page.waitForFunction(() => Array.from(document.querySelectorAll('select'))
     .some(select => select.labels?.[0]?.textContent.includes("When the PC sleeps") && !select.disabled));
-  await named("Timer").click();
+  await named("Back to Timer").click();
   await verifyAdditionalModes(page, named, current);
   await page.getByRole("combobox", { name: "Preset", exact: true }).selectOption("classic");
   await page.getByText("Customize session or preset", { exact: true }).click();
@@ -324,7 +324,7 @@ async function verifySurfaces(page, named) {
   await inspectUntil(smokeTitle, window => !window.visible || window.minimized);
   signal("hotkey", smokeTitle, 4);
   await inspectUntil(smokeTitle, window => window.visible && !window.minimized);
-  await named("Timer").click();
+  await named("Back to Timer").click();
   await named("Pause").waitFor();
   console.log("Verified taskbar restore, click-through mini timer, saved drag placement, maximized and borderless-fullscreen alerts, shortcut dismissal, and close-to-tray.");
 }
