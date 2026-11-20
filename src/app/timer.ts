@@ -58,7 +58,6 @@ export type Workspace = {
   appearance: Appearance;
   history: StudyHistory;
   language: "en" | "da";
-  compactSidebar: boolean;
 };
 export type TimerAction = "pause" | "resume" | "next" | "skip" | "restart" | "add" | "stop";
 
@@ -90,7 +89,7 @@ export function newWorkspace(legacyMode?: DisplayMode): Workspace {
     version: 1, presets: [], nextPreset: 1, lastPreset: "classic",
     policies: { lock: "pause", sleep: "pause", quit: "pause" },
     session: null, result: null, transition: null, checkpoint: 0, desktop: newDesktopSettings(),
-    appearance: newAppearance(legacyMode), history: readHistory(null), language: "en", compactSidebar: false,
+    appearance: newAppearance(legacyMode), history: readHistory(null), language: "en",
   };
 }
 
@@ -179,7 +178,7 @@ function decodeSession(session: Session) {
 
 export function decodeWorkspace(json: string, legacyMode?: DisplayMode): Workspace {
   try {
-    const state = JSON.parse(json) as Workspace;
+    const state = JSON.parse(json) as Workspace & { compactSidebar?: unknown };
     if (state.version !== 1 || !Array.isArray(state.presets) || !integer(state.nextPreset, 1)
         || !integer(state.checkpoint, 0) || typeof state.lastPreset !== "string"
         || !["lock", "sleep", "quit"].every(key => ["pause", "continue"].includes(state.policies[key as Interruption]))) {
@@ -204,7 +203,7 @@ export function decodeWorkspace(json: string, legacyMode?: DisplayMode): Workspa
     state.appearance = readAppearance(state.appearance, legacyMode);
     state.history = readHistory(state.history);
     state.language = state.language === "da" ? "da" : "en";
-    state.compactSidebar = state.compactSidebar === true;
+    delete state.compactSidebar;
     return state;
   } catch {
     throw new Error("Saved TimerOS data could not be read. The original file is still available.");

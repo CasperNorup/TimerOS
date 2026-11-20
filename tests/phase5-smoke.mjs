@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 export async function verifyPhaseFive(page, restore, options = {}) {
   const button = name => page.getByRole("button", { name, exact: true });
@@ -9,7 +12,7 @@ export async function verifyPhaseFive(page, restore, options = {}) {
 
   await about.press("Enter");
   const aboutDialog = page.getByRole("dialog", { name: "About TimerOS" });
-  await aboutDialog.getByText("Version 0.5.3", { exact: true }).waitFor();
+  await aboutDialog.getByText("Version " + version, { exact: true }).waitFor();
   await aboutDialog.getByRole("link", { name: "CasperRNorup@gmail.com" }).waitFor();
   await button("Third-party licenses").click();
   const notices = page.getByLabel("Third-party notices");
@@ -20,7 +23,6 @@ export async function verifyPhaseFive(page, restore, options = {}) {
   await aboutDialog.waitFor({ state: "hidden" });
   assert.equal(await about.evaluate(node => node === document.activeElement), true);
 
-  await button("Settings").click();
   await expand("Mini timer");
   await select("Mini timer colors").selectOption("custom");
   await select("Mini timer background style").selectOption("gradient");
@@ -56,44 +58,52 @@ export async function verifyPhaseFive(page, restore, options = {}) {
   assert.equal(await record.isChecked(), false);
   await record.click();
   await page.waitForFunction(() => document.querySelector('.settings[aria-label="Study history settings"] input')?.checked);
-  await button("Timer").click();
+  await button("Back to Settings").click();
+  await button("Back to Timer").click();
   await select("Preset").selectOption("stopwatch");
   await page.getByRole("textbox", { name: "Study subject (optional)", exact: true }).fill("Ring theory");
   await button("Start").click();
   const session = page.getByRole("region", { name: "Current session" });
   await session.waitFor();
   await restore();
+  await button("Settings").click();
+  await heading("Settings").waitFor();
+  await button("Back to Timer").click();
+  await session.getByRole("heading", { name: "Stopwatch" }).waitFor();
+  await button("Pause").waitFor();
   await page.waitForFunction(() => document.querySelector('.time[aria-label="Time elapsed"]')?.textContent !== "0:00");
   await button("Stop").click();
   await page.getByText(/^Session stopped/).waitFor();
+  await button("Settings").click();
   await button("History").click();
   await page.getByText("Ring theory", { exact: true }).waitFor();
   await page.getByText("Partial", { exact: true }).waitFor();
 
-  await button("Settings").click();
+  await button("Back to Settings").click();
   await select("App language").selectOption("da");
   await heading("Indstillinger").waitFor();
   await page.reload({ waitUntil: "domcontentloaded" });
   await heading("Timer").waitFor();
   assert.equal(await page.locator("html").getAttribute("lang"), "da");
+  await button("Indstillinger").click();
   await button("Historik").click();
   await heading("Historik").waitFor();
   await page.getByText("Seneste sessioner", { exact: true }).waitFor();
   await page.getByText("Delvis", { exact: true }).waitFor();
-  await button("Om TimerOS").click();
-  await page.getByRole("dialog", { name: "Om TimerOS" }).waitFor();
-  await button("Luk").click();
   await button("Ryd historik").click();
   await button("Annuller").click();
   assert.equal(await page.getByText("Ring theory", { exact: true }).count(), 1);
-  await button("Indstillinger").click();
+  await button("Tilbage til indstillinger").click();
+  await button("Om TimerOS").click();
+  await page.getByRole("dialog", { name: "Om TimerOS" }).waitFor();
+  await button("Luk").click();
   await select("Appsprog").selectOption("en");
   await heading("Settings").waitFor();
   await verifySavedPhaseFive(page);
   await button("History").click();
   await record.click();
   await page.getByText("Turn on recording to save future sessions.", { exact: true }).waitFor();
-  await button("Settings").click();
+  await button("Back to Settings").click();
   console.log("Verified About and offline notices, keyboard color editing, mini timer gradients and fonts, optional history, and persisted Danish and English UI.");
 }
 

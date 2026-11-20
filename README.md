@@ -2,9 +2,9 @@
 
 TimerOS is a Windows study timer designed to work offline. Choose a focus routine, start it, and keep working with a small, click-through timer at the bottom of the screen. Customizable screen alerts signal focus and break transitions. Sound is off by default.
 
-## TimerOS 0.5.3 for Windows
+## TimerOS 0.5.4 for Windows
 
-Choose Pomodoro, fixed focus and break intervals, a single countdown, Stopwatch, a custom sequence, or Flowtime from **Timer** in the sidebar. Edit the current setup or save it as a named preset. Automatic and manual transitions are available for timed focus and break blocks.
+Choose Pomodoro, fixed focus and break intervals, a single countdown, Stopwatch, a custom sequence, or Flowtime on the main timer screen. Edit the current setup or save it as a named preset. Automatic and manual transitions are available for timed focus and break blocks.
 
 - **Stopwatch** counts up from zero. Set a focus-time target to finish automatically and show progress, or press Stop whenever you are done.
 - **Review Sequence** is a starting point for a custom sequence. Name, reorder, add, or remove timed focus and break blocks. Run the sequence once, repeat it, or set a round or focus-time goal.
@@ -12,9 +12,9 @@ Choose Pomodoro, fixed focus and break intervals, a single countdown, Stopwatch,
 
 Starting a session minimizes TimerOS and opens the click-through mini timer. Restore the main window from the taskbar or tray. Closing the main window during a session leaves the timer running in the tray. Use **Quit TimerOS** from the tray or Settings to exit.
 
-In **History**, turn on **Record study history** to save future sessions locally. Optionally enter a subject when you start a session. A stopped session records the time you actually spent focusing and appears as partial. The view shows the latest 50 sessions and totals for the current day and Monday-based week, based on when each session ended. TimerOS retains up to 1,000 sessions. Turn off recording or clear the saved data from History.
+In **Settings → History**, turn on **Record study history** to save future sessions locally. Optionally enter a subject when you start a session. A stopped session records the time you actually spent focusing and appears as partial. The view shows the latest 50 sessions and totals for the current day and Monday-based week, based on when each session ended. TimerOS retains up to 1,000 sessions. Turn off recording or clear the saved data from History.
 
-**Settings → Language** switches between English and Danish. The sidebar's **About** button shows the running version, contact details, and the bundled third-party notices.
+**Settings → Language** switches between English and Danish. **Settings → About TimerOS** shows the running version, contact details, and the bundled third-party notices.
 
 **Settings → Appearance** lets you choose System, Light, or Dark independently of the theme. Create or duplicate a theme to edit its light and dark palettes. Preview changes in the app as you edit. Switch between the theme background, a solid color, a gradient, either bundled photo, or your own PNG, JPEG, or WebP. TimerOS keeps a local copy of the selected image. Use **Image fit** and the horizontal and vertical sliders to frame it. If the saved copy becomes unavailable, TimerOS uses the theme background.
 
